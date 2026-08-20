@@ -17,13 +17,25 @@ initial_state = {
     "jobs": [],
     "current_job": None,
     "analysis_result": {},
-    "analyses": []
+    "analyses": [],
+    "ranked_jobs": []
 }
 
 result = graph.invoke(initial_state)
 print("days_old:", result["days_old"])
 print("jobs found:", len(result["jobs"]))
 
-
 for analysis in result["analyses"]:
     print(analysis)
+print("ranked jobs:", len(result["ranked_jobs"]))
+
+for job in result["ranked_jobs"]:
+    print(
+        job["match_score"],
+        "-",
+        job["title"],
+        "at",
+        job["company"],
+        "-",
+        job["recommendation"]
+    )

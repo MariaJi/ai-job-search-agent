@@ -19,3 +19,4 @@ class JobSearchState(TypedDict):
     current_job: Job | None
     analysis_result: dict
     analyses: Annotated[list[dict], operator.add]
+    ranked_jobs: list[dict]

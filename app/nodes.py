@@ -180,7 +180,25 @@ def analyze_job(state: JobSearchState):
     )
 
     return {
-        "analyses": [analysis.model_dump()]
-    }
+    "analyses": [
+        {
+            "title": current_job["title"],
+            "company": current_job["company"],
+            "location": current_job["location"],
+            "url": current_job["url"],
+            **analysis.model_dump()
+        }
+    ]
+}
 
+def rank_jobs(state: JobSearchState):
+    ranked = sorted(
+        state["analyses"],
+        key=lambda item: item["match_score"],
+        reverse=True
+    )
+
+    return {
+        "ranked_jobs": ranked
+    }
     
