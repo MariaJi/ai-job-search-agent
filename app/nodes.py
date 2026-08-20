@@ -22,13 +22,42 @@ class SearchCriteria(BaseModel):
     employment_type: str
     days_old: int
 
+class JobAnalysis(BaseModel):
+    match_score: int
+    strengths: list[str]
+    missing_skills: list[str]
+    recommendation: str
+
+
 model = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
 )
 
 structured_model = model.with_structured_output(SearchCriteria)
+job_analysis_model = model.with_structured_output(JobAnalysis)
 
+CANDIDATE_PROFILE = """
+Senior Software Engineer with 10+ years of enterprise software development experience.
+
+Core skills:
+- C#, .NET, ASP.NET Core, Web API
+- Python, FastAPI
+- React, JavaScript
+- SQL Server
+- Azure
+- Docker
+- REST APIs
+- LLM applications and RAG
+- LangGraph and agentic AI
+
+Additional strengths:
+- Enterprise application development
+- Full-stack development
+- API integration
+- Cloud-based application development
+- AI application development
+"""
 
 def understand_search_request(state: JobSearchState):
     search_request = state["search_request"]
@@ -121,13 +150,38 @@ def analyze_job(state: JobSearchState):
             "analysis_result": "No jobs found to analyze."
         }
 
-    result = (
-        f"Analyzed job: {current_job['title']} "
-        f"at {current_job['company']}"
+    analysis = job_analysis_model.invoke(
+        f"""
+        Evaluate how well this candidate matches the job.
+
+        Candidate profile:
+        {CANDIDATE_PROFILE}
+
+        Job title:
+        {current_job["title"]}
+
+        Company:
+        {current_job["company"]}
+
+        Location:
+        {current_job["location"]}
+
+        Job description:
+        {current_job["description"]}
+
+        Rules:
+        - match_score must be an integer from 0 to 100.
+        - strengths should list the candidate qualifications that match the job.
+        - missing_skills should list important job requirements that are missing or not clearly demonstrated in the candidate profile.
+        - Do not assume the candidate has skills that are not stated in the candidate profile.
+        - recommendation should be one of:
+          "Strong Apply", "Apply", "Maybe", or "Skip".
+        """
     )
 
     return {
-        "analysis_result": result
+        "analysis_result": analysis.model_dump()
     }
+
 
     

@@ -15,4 +15,4 @@ class JobSearchState(TypedDict):
     days_old: int
     jobs: list[Job]
     current_job: Job | None
-    analysis_result: str
+    analysis_result: dict
