@@ -19,7 +19,8 @@ initial_state = {
     
     "analyses": [],
     "ranked_jobs": [],
-    "selected_jobs": []
+    "selected_jobs": [],
+    "final_report": ""
 }
 
 result = graph.invoke(initial_state)
@@ -42,3 +43,6 @@ for job in result["selected_jobs"]:
         "-",
         job["recommendation"]
     )
+
+print("\nFINAL REPORT")
+print(result["final_report"])

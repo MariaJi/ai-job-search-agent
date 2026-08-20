@@ -211,3 +211,26 @@ def select_jobs(state: JobSearchState):
     return {
         "selected_jobs": selected
     }
+
+def generate_report(state: JobSearchState):
+    selected_jobs = state["selected_jobs"]
+
+    if not selected_jobs:
+        return {
+            "final_report": "No strong job matches were found."
+        }
+
+    lines = []
+
+    for job in selected_jobs:
+        lines.append(
+            f"{job['match_score']} - "
+            f"{job['title']} at {job['company']} - "
+            f"{job['recommendation']}\n"
+            f"Location: {job['location']}\n"
+            f"URL: {job['url']}\n"
+        )
+
+    return {
+        "final_report": "\n".join(lines)
+    }
