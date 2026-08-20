@@ -20,3 +20,4 @@ class JobSearchState(TypedDict):
   
     analyses: Annotated[list[dict], operator.add]
     ranked_jobs: list[dict]
+    selected_jobs: list[dict]

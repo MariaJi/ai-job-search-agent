@@ -201,4 +201,13 @@ def rank_jobs(state: JobSearchState):
     return {
         "ranked_jobs": ranked
     }
-    
+
+def select_jobs(state: JobSearchState):
+    selected = [
+        job for job in state["ranked_jobs"]
+        if job["recommendation"] in ["Strong Apply", "Apply"]
+    ]
+
+    return {
+        "selected_jobs": selected
+    }

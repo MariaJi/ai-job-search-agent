@@ -7,7 +7,8 @@ from app.nodes import (
     understand_search_request,
     search_jobs,
     analyze_job,
-    rank_jobs
+    rank_jobs,
+    select_jobs
 )
 
 def fan_out_jobs(state: JobSearchState):
@@ -30,9 +31,11 @@ builder.add_node("understand_search_request", understand_search_request)
 builder.add_node("search_jobs", search_jobs)
 builder.add_node("analyze_job", analyze_job)
 builder.add_node("rank_jobs", rank_jobs)
+builder.add_node("select_jobs", select_jobs)
 # Edges
 builder.add_edge(START, "understand_search_request")
 builder.add_edge("understand_search_request", "search_jobs")
+
 
 builder.add_conditional_edges(
     "search_jobs",        # FROM this node
@@ -41,7 +44,8 @@ builder.add_conditional_edges(
 )
 
 builder.add_edge("analyze_job", "rank_jobs")
-builder.add_edge("rank_jobs", END)
+builder.add_edge("rank_jobs", "select_jobs")
+builder.add_edge("select_jobs", END)
 
 # Compile the LangGraph
 graph = builder.compile()
