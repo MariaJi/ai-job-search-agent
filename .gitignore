@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.env      → contains your secret OpenAI API key
+.venv/    → contains locally installed Python packages
