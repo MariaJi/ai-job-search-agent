@@ -147,7 +147,7 @@ def analyze_job(state: JobSearchState):
 
     if current_job is None:
         return {
-            "analysis_result": "No jobs found to analyze."
+            "analyses": []
         }
 
     analysis = job_analysis_model.invoke(
@@ -180,8 +180,7 @@ def analyze_job(state: JobSearchState):
     )
 
     return {
-        "analysis_result": analysis.model_dump()
+        "analyses": [analysis.model_dump()]
     }
-
 
     

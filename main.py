@@ -16,10 +16,14 @@ initial_state = {
     "days_old": 7,
     "jobs": [],
     "current_job": None,
-    "analysis_result": {}
+    "analysis_result": {},
+    "analyses": []
 }
 
 result = graph.invoke(initial_state)
 print("days_old:", result["days_old"])
 print("jobs found:", len(result["jobs"]))
-print(result)
+
+
+for analysis in result["analyses"]:
+    print(analysis)

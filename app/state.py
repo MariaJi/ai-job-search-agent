@@ -1,4 +1,6 @@
 from typing import TypedDict
+from typing import TypedDict, Annotated
+import operator
 class Job(TypedDict):
     title: str
     company: str
@@ -16,3 +18,4 @@ class JobSearchState(TypedDict):
     jobs: list[Job]
     current_job: Job | None
     analysis_result: dict
+    analyses: Annotated[list[dict], operator.add]
