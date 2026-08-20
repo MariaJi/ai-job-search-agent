@@ -17,6 +17,6 @@ class JobSearchState(TypedDict):
     days_old: int
     jobs: list[Job]
     current_job: Job | None
-    analysis_result: dict
+  
     analyses: Annotated[list[dict], operator.add]
     ranked_jobs: list[dict]

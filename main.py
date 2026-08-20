@@ -16,7 +16,7 @@ initial_state = {
     "days_old": 7,
     "jobs": [],
     "current_job": None,
-    "analysis_result": {},
+    
     "analyses": [],
     "ranked_jobs": []
 }
