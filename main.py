@@ -7,6 +7,9 @@ print("API key loaded:", bool(os.getenv("OPENAI_API_KEY")))
 from app.graph import graph
 print(graph.get_graph().draw_mermaid())
 
+from app.tools.resume_reader import read_docx_resume
+
+resume_text = read_docx_resume("data/resume.docx")
 
 initial_state = {
    "search_request": "Find remote Senior AI Engineer jobs from the last 1 day",
@@ -20,7 +23,9 @@ initial_state = {
     "analyses": [],
     "ranked_jobs": [],
     "selected_jobs": [],
-    "final_report": ""
+    "final_report": "",
+    "resume_text": resume_text,
+    "candidate_profile": {},
 }
 
 result = graph.invoke(initial_state)

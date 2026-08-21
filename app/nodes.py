@@ -28,6 +28,14 @@ class JobAnalysis(BaseModel):
     missing_skills: list[str]
     recommendation: str
 
+class CandidateProfile(BaseModel):
+    summary: str
+    years_experience: int
+    technical_skills: list[str]
+    ai_skills: list[str]
+    cloud_skills: list[str]
+    domain_experience: list[str]
+    education: list[str]
 
 model = ChatOpenAI(
     model="gpt-4o-mini",
@@ -36,6 +44,7 @@ model = ChatOpenAI(
 
 structured_model = model.with_structured_output(SearchCriteria)
 job_analysis_model = model.with_structured_output(JobAnalysis)
+candidate_profile_model = model.with_structured_output(CandidateProfile)
 
 CANDIDATE_PROFILE = """
 Senior Software Engineer with 10+ years of enterprise software development experience.
@@ -142,9 +151,36 @@ def search_jobs(state: JobSearchState):
         "current_job": jobs[0] if jobs else None
     }
 
-def analyze_job(state: JobSearchState):
-    current_job = state["current_job"]
+def extract_candidate_profile(state: JobSearchState):
+    resume_text = state["resume_text"]
 
+    profile = candidate_profile_model.invoke(
+        f"""
+        Extract a structured candidate profile from this resume.
+
+        Resume:
+        {resume_text}
+
+        Rules:
+        - Summarize the candidate's professional background.
+        - Estimate years_experience from the resume.
+        - Extract technical skills.
+        - Extract AI/ML/LLM-related skills separately.
+        - Extract cloud skills separately.
+        - Extract major domain/industry experience.
+        - Extract education.
+        - Do not invent skills or experience that are not supported by the resume.
+        """
+    )
+
+    return {
+        "candidate_profile": profile.model_dump()
+    }
+
+def analyze_job(state: JobSearchState):
+    
+    current_job = state["current_job"]
+    candidate_profile = state["candidate_profile"]
     if current_job is None:
         return {
             "analyses": []
@@ -155,7 +191,7 @@ def analyze_job(state: JobSearchState):
         Evaluate how well this candidate matches the job.
 
         Candidate profile:
-        {CANDIDATE_PROFILE}
+        {candidate_profile}
 
         Job title:
         {current_job["title"]}

@@ -22,3 +22,6 @@ class JobSearchState(TypedDict):
     ranked_jobs: list[dict]
     selected_jobs: list[dict]
     final_report: str
+    
+    resume_text: str
+    candidate_profile: dict
