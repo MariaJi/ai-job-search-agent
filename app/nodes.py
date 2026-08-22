@@ -22,8 +22,10 @@ class SearchCriteria(BaseModel):
     employment_type: str
     days_old: int
 
+
 class JobAnalysis(BaseModel):
     match_score: int
+    confidence: str
     strengths: list[str]
     missing_skills: list[str]
     recommendation: str
@@ -141,7 +143,9 @@ def search_jobs(state: JobSearchState):
             "location": raw_job.get("location", ""),
             "description": clean_html_text(raw_job.get("snippet", "")),
             "url": raw_job.get("link", ""),
-            "updated_date": updated_text
+            "updated_date": updated_text,
+            "description_source": "jooble_snippet",
+            "description_complete": False,
         }
 
         jobs.append(job)
@@ -187,34 +191,43 @@ def analyze_job(state: JobSearchState):
         }
 
     analysis = job_analysis_model.invoke(
-        f"""
-        Evaluate how well this candidate matches the job.
+    f"""
+    Evaluate how well this candidate matches the job.
 
-        Candidate profile:
-        {candidate_profile}
+    Candidate profile:
+    {candidate_profile}
 
-        Job title:
-        {current_job["title"]}
+    Job title:
+    {current_job["title"]}
 
-        Company:
-        {current_job["company"]}
+    Company:
+    {current_job["company"]}
 
-        Location:
-        {current_job["location"]}
+    Location:
+    {current_job["location"]}
 
-        Job description:
-        {current_job["description"]}
+    Job description:
+    {current_job["description"]}
 
-        Rules:
-        - match_score must be an integer from 0 to 100.
-        - strengths should list the candidate qualifications that match the job.
-        - missing_skills should list important job requirements that are missing or not clearly demonstrated in the candidate profile.
-        - Do not assume the candidate has skills that are not stated in the candidate profile.
-        - recommendation should be one of:
-          "Strong Apply", "Apply", "Maybe", or "Skip".
-        """
-    )
+    Description source:
+    {current_job["description_source"]}
 
+    Description complete:
+    {current_job["description_complete"]}
+
+    Rules:
+    - match_score must be an integer from 0 to 100.
+    - confidence must be one of: "High", "Medium", or "Low".
+    - strengths should list the candidate qualifications that match the job.
+    - missing_skills should list important requirements that are missing or not clearly demonstrated.
+    - Do not assume the candidate has skills not stated in the profile.
+    - If description_complete is False, treat the analysis as preliminary.
+    - Do not assume the snippet contains all job requirements.
+    - Avoid "High" confidence when the job description is incomplete.
+    - recommendation should be one of:
+      "Strong Apply", "Apply", "Maybe", or "Skip".
+    """
+)
     return {
     "analyses": [
         {
@@ -226,6 +239,11 @@ def analyze_job(state: JobSearchState):
         }
     ]
 }
+
+
+
+
+
 
 def rank_jobs(state: JobSearchState):
     ranked = sorted(

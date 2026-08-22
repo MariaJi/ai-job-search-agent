@@ -6,6 +6,8 @@ class Job(TypedDict):
     company: str
     location: str
     description: str
+    description_source: str
+    description_complete: bool
     url: str
     updated_date: str
 

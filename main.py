@@ -46,7 +46,9 @@ for job in result["selected_jobs"]:
         "at",
         job["company"],
         "-",
-        job["recommendation"]
+        job["recommendation"],
+         "- Confidence:",
+        job["confidence"]
     )
 
 print("\nFINAL REPORT")
