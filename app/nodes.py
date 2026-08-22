@@ -32,7 +32,6 @@ class JobAnalysis(BaseModel):
     confidence: str
     strengths: list[str]
     missing_skills: list[str]
-    recommendation: str
 
 
 class CandidateProfile(BaseModel):
@@ -320,8 +319,6 @@ def analyze_job(state: JobSearchState):
     - missing_skills must contain important job requirements that are
       missing or not clearly demonstrated in the candidate profile.
 
-    - recommendation must be one of:
-        "Strong Apply", "Apply", "Maybe", or "Skip"
     """
     )   
 
@@ -334,6 +331,15 @@ def analyze_job(state: JobSearchState):
         + analysis.location_score
     )
 
+    if match_score >= 90:
+        recommendation = "Strong Apply"
+    elif match_score >= 75:
+        recommendation = "Apply"
+    elif match_score >= 60:
+        recommendation = "Maybe"
+    else:
+        recommendation = "Skip"
+
     return {
     "analyses": [
         {
@@ -342,6 +348,7 @@ def analyze_job(state: JobSearchState):
             "location": current_job["location"],
             "url": current_job["url"],
             "match_score": match_score,
+            "recommendation": recommendation,
             **analysis.model_dump()
         }
     ]
