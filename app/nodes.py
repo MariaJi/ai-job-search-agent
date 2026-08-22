@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
 from app.state import JobSearchState
@@ -22,13 +22,18 @@ class SearchCriteria(BaseModel):
     employment_type: str
     days_old: int
 
-
 class JobAnalysis(BaseModel):
-    match_score: int
+    technical_score: int = Field(ge=0, le=40)
+    experience_score: int = Field(ge=0, le=25)
+    role_specific_score: int = Field(ge=0, le=20)
+    tools_platform_score: int = Field(ge=0, le=10)
+    location_score: int = Field(ge=0, le=5)
+
     confidence: str
     strengths: list[str]
     missing_skills: list[str]
     recommendation: str
+
 
 class CandidateProfile(BaseModel):
     summary: str
@@ -128,6 +133,7 @@ def search_jobs(state: JobSearchState):
 
     jobs = []
 
+   
     for raw_job in raw_jobs:
         updated_text = raw_job.get("updated", "")
 
@@ -144,6 +150,7 @@ def search_jobs(state: JobSearchState):
             "description": clean_html_text(raw_job.get("snippet", "")),
             "url": raw_job.get("link", ""),
             "updated_date": updated_text,
+            "source": raw_job.get("source", ""),
             "description_source": "jooble_snippet",
             "description_complete": False,
         }
@@ -182,17 +189,19 @@ def extract_candidate_profile(state: JobSearchState):
     }
 
 def analyze_job(state: JobSearchState):
-    
+
     current_job = state["current_job"]
     candidate_profile = state["candidate_profile"]
+
     if current_job is None:
         return {
             "analyses": []
         }
 
+
     analysis = job_analysis_model.invoke(
     f"""
-    Evaluate how well this candidate matches the job.
+    Evaluate how well this candidate matches THIS specific job.
 
     Candidate profile:
     {candidate_profile}
@@ -215,19 +224,116 @@ def analyze_job(state: JobSearchState):
     Description complete:
     {current_job["description_complete"]}
 
-    Rules:
-    - match_score must be an integer from 0 to 100.
-    - confidence must be one of: "High", "Medium", or "Low".
-    - strengths should list the candidate qualifications that match the job.
-    - missing_skills should list important requirements that are missing or not clearly demonstrated.
-    - Do not assume the candidate has skills not stated in the profile.
-    - If description_complete is False, treat the analysis as preliminary.
-    - Do not assume the snippet contains all job requirements.
-    - Avoid "High" confidence when the job description is incomplete.
-    - recommendation should be one of:
-      "Strong Apply", "Apply", "Maybe", or "Skip".
+
+    SCORING GUIDANCE
+
+    technical_score (0-40):
+    - Evaluate the candidate's broader technical capability against the
+      core technical responsibilities of this job.
+    - Consider software engineering depth, architecture, development,
+      integration, problem solving, and other core technical capabilities
+      relevant to this job.
+    - Do not give points simply because the candidate has strong technical
+      skills that this job does not require.
+    - Do not double-count specific named tools, frameworks, or platforms
+      that belong in tools_platform_score.
+    - 35-40: excellent match
+    - 25-34: strong match with some gaps
+    - 15-24: partial match
+    - 0-14: weak match
+
+
+    experience_score (0-25):
+    - Evaluate years of experience, seniority, responsibilities, and
+      relevant professional background.
+    - Consider whether the candidate's experience level matches what
+      THIS job requires.
+    - 22-25: very strong experience match
+    - 15-21: generally relevant experience
+    - 8-14: partially relevant experience
+    - 0-7: weak experience match
+
+
+    role_specific_score (0-20):
+    - Identify the specialized capabilities that are particularly important
+      to THIS specific role from the job description.
+    - Score how well the candidate demonstrates those capabilities.
+    - The specialty depends on the job.
+    - For example, an AI role may emphasize LLM/RAG/ML capabilities,
+      while a backend role may emphasize API architecture, distributed
+      systems, or enterprise integration.
+    - Do not assume AI, cloud, or any other specialty is required unless
+      the job description indicates it.
+    - Do not double-count general technical skills already evaluated in
+      technical_score.
+    - 17-20: very strong match
+    - 10-16: moderate match
+    - 1-9: limited match
+    - 0: no demonstrated match
+
+
+    tools_platform_score (0-10):
+    - Evaluate explicitly requested tools, frameworks, platforms,
+      databases, cloud services, libraries, and development technologies.
+    - Only evaluate technologies relevant to THIS job.
+    - Compare those technologies against technologies explicitly
+      demonstrated in the candidate profile.
+    - Do not double-count broader technical capability already evaluated
+      in technical_score or role_specific_score.
+    - 8-10: strong match
+    - 4-7: partial match
+    - 1-3: weak match
+    - 0: no demonstrated match
+
+
+    location_score (0-5):
+    - Evaluate whether the job's location and work arrangement fit
+      the candidate.
+    - 5: clearly compatible
+    - 3: unclear or potentially compatible
+    - 0: clearly incompatible
+
+
+    IMPORTANT SCORING RULES
+
+    - Score against THIS job's requirements, not against a generic ideal
+      candidate.
+    - Do not reward a candidate skill unless it is relevant to this job.
+    - Do not invent candidate skills or experience.
+    - Do not assume missing job requirements.
+    - Avoid double-counting the same qualification across categories.
+    - Missing information is not evidence of a match.
+
+    - If description_complete is False:
+        - treat the analysis as preliminary
+        - score only against requirements actually visible
+        - do not assume the snippet contains all requirements
+        - be conservative about the recommendation
+        - confidence should normally be "Low" or "Medium"
+
+    - confidence must be one of:
+        "High", "Medium", or "Low"
+
+    - strengths must contain qualifications from the candidate profile
+      that directly support this job.
+
+    - missing_skills must contain important job requirements that are
+      missing or not clearly demonstrated in the candidate profile.
+
+    - recommendation must be one of:
+        "Strong Apply", "Apply", "Maybe", or "Skip"
     """
-)
+    )   
+
+    
+    match_score = (
+        analysis.technical_score
+        + analysis.experience_score
+        + analysis.role_specific_score
+        + analysis.tools_platform_score
+        + analysis.location_score
+    )
+
     return {
     "analyses": [
         {
@@ -235,13 +341,11 @@ def analyze_job(state: JobSearchState):
             "company": current_job["company"],
             "location": current_job["location"],
             "url": current_job["url"],
+            "match_score": match_score,
             **analysis.model_dump()
         }
     ]
 }
-
-
-
 
 
 

@@ -38,18 +38,20 @@ print("ranked jobs:", len(result["ranked_jobs"]))
 
 print("selected jobs:", len(result["selected_jobs"]))
 
+
 for job in result["selected_jobs"]:
     print(
         job["match_score"],
         "-",
         job["title"],
-        "at",
-        job["company"],
-        "-",
-        job["recommendation"],
-         "- Confidence:",
-        job["confidence"]
+        "- Technical:", job["technical_score"],
+        "- Experience:", job["experience_score"],
+        "- Role-specific:", job["role_specific_score"],
+        "- Tools/Platform:", job["tools_platform_score"],
+        "- Location:", job["location_score"],
+        "- Confidence:", job["confidence"],
     )
 
 print("\nFINAL REPORT")
 print(result["final_report"])
+
