@@ -331,7 +331,7 @@ def analyze_job(state: JobSearchState):
         + analysis.location_score
     )
 
-    if match_score >= 90:
+    if match_score >= 90 and analysis.confidence == "High":
         recommendation = "Strong Apply"
     elif match_score >= 75:
         recommendation = "Apply"
@@ -349,6 +349,7 @@ def analyze_job(state: JobSearchState):
             "url": current_job["url"],
             "match_score": match_score,
             "recommendation": recommendation,
+            "needs_verification": not current_job["description_complete"],
             **analysis.model_dump()
         }
     ]
@@ -392,8 +393,11 @@ def generate_report(state: JobSearchState):
             f"{job['match_score']} - "
             f"{job['title']} at {job['company']} - "
             f"{job['recommendation']}\n"
+            f"Confidence: {job['confidence']}\n"
+            f"Needs verification: "
+            f"{'Yes' if job['needs_verification'] else 'No'}\n"
             f"Location: {job['location']}\n"
-            f"URL: {job['url']}\n"
+            f"URL: {job['url']}\n\n"
         )
 
     return {
