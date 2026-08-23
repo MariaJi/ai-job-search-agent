@@ -368,15 +368,32 @@ def rank_jobs(state: JobSearchState):
         "ranked_jobs": ranked
     }
 
+
 def select_jobs(state: JobSearchState):
     selected = [
-        job for job in state["ranked_jobs"]
-        if job["recommendation"] in ["Strong Apply", "Apply"]
+        job
+        for job in state["ranked_jobs"]
+        if (
+            job["recommendation"] in ["Strong Apply", "Apply"]
+            and job["match_score"] >= 75
+        )
     ]
+
+    def job_sort_key(job):
+        return (
+            job["needs_verification"],
+            -job["match_score"]
+        )
+
+    selected = sorted(
+        selected,
+        key=job_sort_key
+    )
 
     return {
         "selected_jobs": selected
     }
+
 
 def generate_report(state: JobSearchState):
     selected_jobs = state["selected_jobs"]
