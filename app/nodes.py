@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import html
 import re
-
+from urllib.parse import urlparse
 def clean_html_text(text: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"<[^>]+>", "", text)
@@ -225,6 +225,119 @@ def evaluate_job_source_match(
         """
     )
 
+def normalize_company_name(name: str) -> str:
+    name = name.lower()
+    name = name.replace(",", "")
+    name = name.replace(".", "")
+    name = name.replace(" inc", "")
+    name = name.replace(" llc", "")
+    name = name.replace(" ltd", "")
+    return name.strip()
+
+
+def get_source_quality(url: str, company: str) -> int:
+    domain = urlparse(url).netloc.lower().replace("www.", "")
+    normalized_company = normalize_company_name(company)
+
+    trusted_ats = [
+        "greenhouse.io",
+        "lever.co",
+        "myworkdayjobs.com",
+        "ashbyhq.com",
+    ]
+
+    secondary_sources = [
+        "linkedin.com",
+    ]
+
+    aggregators = [
+        "jooble.org",
+        "jobleads.com",
+        "grabjobs.co",
+        "ziprecruiter.com",
+        "indeed.com",
+    ]
+
+    # Likely company-owned domain
+    company_token = normalized_company.replace(" ", "")
+
+    if company_token and company_token in domain.replace("-", ""):
+        return 4
+
+    if any(source in domain for source in trusted_ats):
+        return 3
+
+    if any(source in domain for source in secondary_sources):
+        return 2
+
+    if any(source in domain for source in aggregators):
+        return 1
+
+    return 0
+
+def select_best_job_source(
+    job: Job,
+    search_results: list[dict]
+) -> dict | None:
+
+    matched_results = []
+
+    confidence_rank = {
+        "High": 3,
+        "Medium": 2,
+        "Low": 1,
+    }
+
+    for result in search_results:
+        match = evaluate_job_source_match(
+            job=job,
+            search_result=result
+        )
+
+        if not match.is_same_job:
+            continue
+
+        matched_results.append({
+            "result": result,
+            "confidence": match.confidence,
+            "confidence_score": confidence_rank.get(
+                match.confidence,
+                0
+            ),
+            "source_quality": get_source_quality(
+                result["url"],
+                job["company"]
+            ),
+            "reason": match.reason,
+        })
+
+    if not matched_results:
+        return None
+
+    matched_results.sort(
+        key=lambda item: (
+            item["source_quality"],
+            item["confidence_score"],
+        ),
+        reverse=True
+    )
+
+    best = matched_results[0]
+    for item in matched_results:
+        print(
+            "\nMATCHED SOURCE:",
+            item["result"]["url"],
+            "- confidence:", item["confidence"],
+            "- source_quality:", item["source_quality"]
+        )
+    return {
+        "title": best["result"]["title"],
+        "url": best["result"]["url"],
+        "content": best["result"]["content"],
+        "match_confidence": best["confidence"],
+        "source_quality": best["source_quality"],
+        "match_reason": best["reason"],
+    }
 
 def get_verification_priority(
     job: Job,
