@@ -32,8 +32,18 @@ result = graph.invoke(initial_state)
 print("days_old:", result["days_old"])
 print("jobs found:", len(result["jobs"]))
 
-for analysis in result["analyses"]:
-    print(analysis)
+
+
+for job in result["analyses"]:
+    print(
+        job["title"],
+        "- preliminary:", job["preliminary_match_score"],
+        "- current:", job["match_score"],
+        "- priority:", job["verification_priority"],
+        "- status:", job["verification_status"],
+        "- needs verification:", job["needs_verification"],
+    )   
+
 print("ranked jobs:", len(result["ranked_jobs"]))
 
 print("selected jobs:", len(result["selected_jobs"]))

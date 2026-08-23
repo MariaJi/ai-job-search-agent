@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
-from app.state import JobSearchState
+from app.state import JobSearchState, Job
 from datetime import datetime, timedelta
 
 import html
@@ -187,6 +187,39 @@ def extract_candidate_profile(state: JobSearchState):
         "candidate_profile": profile.model_dump()
     }
 
+def get_verification_priority(
+    job: Job,
+    analysis: JobAnalysis,
+    match_score: int
+) -> str:
+
+    # We already have a complete job description.
+    # No verification is necessary.
+    if job["description_complete"]:
+        return "Not Needed"
+
+    # The description is incomplete.
+    # Verify promising jobs even if the overall preliminary
+    # score is not high, because the snippet may omit
+    # important matching requirements.
+    if (
+        match_score >= 85
+        or analysis.role_specific_score >= 15
+        or analysis.experience_score >= 20
+        or analysis.confidence == "Low"
+    ):
+        return "High"
+
+    # There is some evidence of a possible match.
+    # Verification may reveal additional requirements
+    # that improve or reduce the score.
+    if match_score >= 60:
+        return "Medium"
+
+    # Weak preliminary evidence.
+    return "Low"
+
+
 def analyze_job(state: JobSearchState):
 
     current_job = state["current_job"]
@@ -340,6 +373,18 @@ def analyze_job(state: JobSearchState):
     else:
         recommendation = "Skip"
 
+    preliminary_match_score = match_score
+
+    if current_job["description_complete"]:
+        verification_status = "not_needed"
+    else:
+        verification_status = "pending"
+
+    verification_priority = get_verification_priority(
+    current_job,
+    analysis,
+    match_score
+    )
     return {
     "analyses": [
         {
@@ -347,14 +392,20 @@ def analyze_job(state: JobSearchState):
             "company": current_job["company"],
             "location": current_job["location"],
             "url": current_job["url"],
+
+            "preliminary_match_score": preliminary_match_score,
             "match_score": match_score,
-            "recommendation": recommendation,
+
+            "verification_status": verification_status,
+            "verification_priority": verification_priority,
             "needs_verification": not current_job["description_complete"],
+
+            "recommendation": recommendation,
+
             **analysis.model_dump()
         }
     ]
 }
-
 
 
 def rank_jobs(state: JobSearchState):
