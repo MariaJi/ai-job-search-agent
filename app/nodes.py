@@ -43,6 +43,12 @@ class CandidateProfile(BaseModel):
     domain_experience: list[str]
     education: list[str]
 
+class JobSourceMatch(BaseModel):
+    is_same_job: bool
+    confidence: str
+    reason: str
+
+
 model = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
@@ -51,6 +57,7 @@ model = ChatOpenAI(
 structured_model = model.with_structured_output(SearchCriteria)
 job_analysis_model = model.with_structured_output(JobAnalysis)
 candidate_profile_model = model.with_structured_output(CandidateProfile)
+job_source_match_model = model.with_structured_output(JobSourceMatch)
 
 CANDIDATE_PROFILE = """
 Senior Software Engineer with 10+ years of enterprise software development experience.
@@ -187,6 +194,38 @@ def extract_candidate_profile(state: JobSearchState):
         "candidate_profile": profile.model_dump()
     }
 
+def evaluate_job_source_match(
+    job: Job,
+    search_result: dict
+) -> JobSourceMatch:
+
+    return job_source_match_model.invoke(
+        f"""
+        Determine whether this web search result is likely the same job
+        as the original job posting.
+
+        Original job:
+        Title: {job["title"]}
+        Company: {job["company"]}
+        Location: {job["location"]}
+        Description snippet: {job["description"]}
+
+        Candidate web result:
+        Title: {search_result["title"]}
+        URL: {search_result["url"]}
+        Content: {search_result["content"]}
+
+        Rules:
+        - Company names may vary slightly, such as "Tight" vs "Tight, Inc."
+        - Job titles may vary in wording or punctuation.
+        - Do not require exact title equality.
+        - A clearly different company means this is not the same job.
+        - Use title, company, location, and content together.
+        - confidence must be one of: "High", "Medium", or "Low".
+        """
+    )
+
+
 def get_verification_priority(
     job: Job,
     analysis: JobAnalysis,
@@ -218,6 +257,8 @@ def get_verification_priority(
 
     # Weak preliminary evidence.
     return "Low"
+
+
 
 
 def analyze_job(state: JobSearchState):
