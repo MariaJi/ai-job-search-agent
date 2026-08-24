@@ -11,6 +11,8 @@ from app.nodes import (
 from app.tools.web_search import (
     search_original_job,
     search_job_on_source,
+    extract_job_description,
+    parse_job_description
 )
 
 
@@ -66,5 +68,20 @@ exact_job = select_exact_job_posting(
     search_results=source_results,
 )
 
-print("\nEXACT JOB:")
-print(exact_job)
+if exact_job:
+    extraction = extract_job_description(
+        exact_job["url"]
+    )
+
+    print("\nEXTRACTION STATUS:")
+    print(extraction["status"])
+    print("SOURCE:", extraction["source"])
+
+    if extraction["status"] == "success":
+        print("\nFULL JOB DESCRIPTION:")
+        print(extraction["content"])
+    else:
+        print("ERROR:", extraction.get("error"))
+
+
+
