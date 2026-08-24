@@ -14,7 +14,7 @@ from app.tools.web_search import (
     extract_job_description,
     parse_job_description
 )
-
+from app.nodes import verify_job
 
 job = {
     "title": "AI-focused Senior Software Engineer",
@@ -85,3 +85,33 @@ if exact_job:
 
 
 
+print("\n\n===== TEST VERIFY_JOB =====")
+
+test_state = {
+    "current_job": job,
+}
+
+verification_result = verify_job(test_state)
+
+print("\nVERIFICATION RESULT:")
+
+verified_job = verification_result["verified_jobs"][0]
+
+print("Title:", verified_job["title"])
+print("Company:", verified_job["company"])
+print(
+    "Verification status:",
+    verified_job["verification_status"]
+)
+print(
+    "Description complete:",
+    verified_job["description_complete"]
+)
+print(
+    "Description source:",
+    verified_job["description_source"]
+)
+print("URL:", verified_job["url"])
+
+print("\nDESCRIPTION:")
+print(verified_job["description"])

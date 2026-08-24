@@ -3,6 +3,11 @@ from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
 from app.state import JobSearchState, Job
 from datetime import datetime, timedelta
+from app.tools.web_search import (
+    search_original_job,
+    search_job_on_source,
+    extract_job_description,
+)
 
 import html
 import re
@@ -611,6 +616,129 @@ def analyze_job(state: JobSearchState):
         }
     ]
 }
+
+def verify_job(state: JobSearchState):
+    current_job = state["current_job"]
+
+    if current_job is None:
+        return {
+            "verified_jobs": []
+        }
+
+    # Already complete — no verification needed.
+    if current_job["description_complete"]:
+        return {
+            "verified_jobs": [
+                {
+                    **current_job,
+                    "verification_status": "not_needed",
+                }
+            ]
+        }
+
+    try:
+        # Step 1: broad web search
+        search_results = search_original_job(
+            title=current_job["title"],
+            company=current_job["company"],
+        )
+
+        if not search_results:
+            return {
+                "verified_jobs": [
+                    {
+                        **current_job,
+                        "verification_status": "not_found",
+                    }
+                ]
+            }
+
+        # Step 2: choose strongest trusted source
+        best_source = select_best_job_source(
+            job=current_job,
+            search_results=search_results,
+        )
+
+        if best_source is None:
+            return {
+                "verified_jobs": [
+                    {
+                        **current_job,
+                        "verification_status": "not_found",
+                    }
+                ]
+            }
+
+        # Step 3: search specifically within that source
+        source_results = search_job_on_source(
+            title=current_job["title"],
+            company=current_job["company"],
+            source_url=best_source["url"],
+        )
+
+        # Step 4: identify exact posting
+        exact_job = select_exact_job_posting(
+            job=current_job,
+            search_results=source_results,
+        )
+
+        if exact_job is None:
+            return {
+                "verified_jobs": [
+                    {
+                        **current_job,
+                        "verification_status": "not_found",
+                    }
+                ]
+            }
+
+        # Step 5: retrieve full JD
+        extraction = extract_job_description(
+            exact_job["url"]
+        )
+
+        if extraction["status"] != "success":
+            return {
+                "verified_jobs": [
+                    {
+                        **current_job,
+                        "verification_status": "failed",
+                    }
+                ]
+            }
+
+        # Successfully verified + enriched.
+        verified_job = {
+            **current_job,
+
+            "description": extraction["content"],
+            "description_source": extraction["source"],
+            "description_complete": True,
+
+            "url": exact_job["url"],
+
+            "verification_status": "verified",
+            "needs_verification": False,
+        }
+
+        return {
+            "verified_jobs": [verified_job]
+        }
+
+    except Exception as exc:
+        print(
+            f"Verification failed for "
+            f"{current_job['title']}: {exc}"
+        )
+
+        return {
+            "verified_jobs": [
+                {
+                    **current_job,
+                    "verification_status": "failed",
+                }
+            ]
+        }
 
 
 def rank_jobs(state: JobSearchState):

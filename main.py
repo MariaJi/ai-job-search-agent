@@ -26,6 +26,7 @@ initial_state = {
     "final_report": "",
     "resume_text": resume_text,
     "candidate_profile": {},
+    "verified_jobs": []
 }
 
 result = graph.invoke(initial_state)

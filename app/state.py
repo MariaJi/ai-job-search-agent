@@ -29,3 +29,4 @@ class JobSearchState(TypedDict):
     
     resume_text: str
     candidate_profile: dict
+    verified_jobs: Annotated[list[dict], operator.add]
