@@ -2,16 +2,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from urllib.parse import urlparse
+
 from app.nodes import (
     evaluate_job_source_match,
     select_best_job_source,
-   
+    select_exact_job_posting,
 )
-
 from app.tools.web_search import (
     search_original_job,
     search_job_on_source,
 )
+
 
 job = {
     "title": "AI-focused Senior Software Engineer",
@@ -59,3 +60,11 @@ if best_source:
         print("URL:", result["url"])
         print("CONTENT:", result["content"])
 
+
+exact_job = select_exact_job_posting(
+    job=job,
+    search_results=source_results,
+)
+
+print("\nEXACT JOB:")
+print(exact_job)

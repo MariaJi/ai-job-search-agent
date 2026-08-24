@@ -339,6 +339,57 @@ def select_best_job_source(
         "match_reason": best["reason"],
     }
 
+def select_exact_job_posting(
+    job: Job,
+    search_results: list[dict]
+) -> dict | None:
+
+    matched_results = []
+
+    confidence_rank = {
+        "High": 3,
+        "Medium": 2,
+        "Low": 1,
+    }
+
+    for result in search_results:
+        match = evaluate_job_source_match(
+            job=job,
+            search_result=result,
+        )
+
+        if not match.is_same_job:
+            continue
+
+        matched_results.append({
+            "result": result,
+            "confidence": match.confidence,
+            "confidence_score": confidence_rank.get(
+                match.confidence,
+                0
+            ),
+            "reason": match.reason,
+        })
+
+    if not matched_results:
+        return None
+
+    matched_results.sort(
+        key=lambda item: item["confidence_score"],
+        reverse=True,
+    )
+
+    best = matched_results[0]
+
+    return {
+        "title": best["result"]["title"],
+        "url": best["result"]["url"],
+        "content": best["result"]["content"],
+        "match_confidence": best["confidence"],
+        "match_reason": best["reason"],
+    }
+
+
 def get_verification_priority(
     job: Job,
     analysis: JobAnalysis,
