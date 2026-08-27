@@ -11,19 +11,13 @@ from app.nodes import (
     rank_jobs,
     select_jobs,
     generate_report,
+    select_verification_candidates,
+    verify_job,
+    send_verification_jobs,
+  
 )
 
-def fan_out_jobs_Old(state: JobSearchState):
-    return [
-        Send(
-            "analyze_job",
-            {
-                "current_job": job,
-                "analyses": []
-            }
-        )
-        for job in state["jobs"]
-    ]
+
 
 def fan_out_jobs(state: JobSearchState):
     return [
@@ -48,6 +42,11 @@ builder.add_node("analyze_job", analyze_job)
 builder.add_node("rank_jobs", rank_jobs)
 builder.add_node("select_jobs", select_jobs)
 builder.add_node("generate_report", generate_report)
+builder.add_node("verify_job", verify_job)
+builder.add_node(
+    "select_verification_candidates",
+    select_verification_candidates
+)
 builder.add_node(
     "extract_candidate_profile",
     extract_candidate_profile
@@ -74,7 +73,18 @@ builder.add_conditional_edges(
 
 builder.add_edge("analyze_job", "rank_jobs")
 
-builder.add_edge("rank_jobs", "select_jobs")
+
+builder.add_edge(
+    "rank_jobs",
+    "select_verification_candidates"
+)
+
+
+builder.add_conditional_edges(
+    "select_verification_candidates",
+    send_verification_jobs,
+    ["verify_job"],
+)
 builder.add_edge("select_jobs", "generate_report")
 builder.add_edge("generate_report", END)
 

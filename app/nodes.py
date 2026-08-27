@@ -9,6 +9,7 @@ from app.tools.web_search import (
     extract_job_description,
 )
 
+from langgraph.types import Send
 import html
 import re
 from urllib.parse import urlparse
@@ -395,41 +396,170 @@ def select_exact_job_posting(
     }
 
 
+
 def get_verification_priority(
     job: Job,
     analysis: JobAnalysis,
     match_score: int
 ) -> str:
 
-    # We already have a complete job description.
-    # No verification is necessary.
     if job["description_complete"]:
         return "Not Needed"
 
-    # The description is incomplete.
-    # Verify promising jobs even if the overall preliminary
-    # score is not high, because the snippet may omit
-    # important matching requirements.
     if (
         match_score >= 85
-        or analysis.role_specific_score >= 15
-        or analysis.experience_score >= 20
-        or analysis.confidence == "Low"
+        or (
+            analysis.role_specific_score >= 15
+            and analysis.technical_score >= 25
+        )
     ):
         return "High"
 
-    # There is some evidence of a possible match.
-    # Verification may reveal additional requirements
-    # that improve or reduce the score.
-    if match_score >= 60:
+    if (
+        match_score >= 60
+        or analysis.experience_score >= 20
+        or analysis.confidence == "Low"
+    ):
         return "Medium"
 
-    # Weak preliminary evidence.
     return "Low"
 
 
 
+def score_job(
+    job: dict,
+    candidate_profile: dict
+) -> JobAnalysis:
 
+        return job_analysis_model.invoke(
+        f"""
+        Evaluate how well this candidate matches THIS specific job.
+
+        Candidate profile:
+        {candidate_profile}
+
+        Job title:
+        {job["title"]}
+
+        Company:
+        {job["company"]}
+
+        Location:
+        {job["location"]}
+
+        Job description:
+        {job["description"]}
+
+        Description source:
+        {job["description_source"]}
+
+        Description complete:
+        {job["description_complete"]}
+
+
+        SCORING GUIDANCE
+
+        technical_score (0-40):
+        - Evaluate the candidate's broader technical capability against the
+          core technical responsibilities of this job.
+        - Consider software engineering depth, architecture, development,
+          integration, problem solving, and other core technical capabilities
+          relevant to this job.
+        - Do not give points simply because the candidate has strong technical
+          skills that this job does not require.
+        - Do not double-count specific named tools, frameworks, or platforms
+          that belong in tools_platform_score.
+        - 35-40: excellent match
+        - 25-34: strong match with some gaps
+        - 15-24: partial match
+        - 0-14: weak match
+
+
+        experience_score (0-25):
+        - Evaluate years of experience, seniority, responsibilities, and
+          relevant professional background.
+        - Consider whether the candidate's experience level matches what
+          THIS job requires.
+        - 22-25: very strong experience match
+        - 15-21: generally relevant experience
+        - 8-14: partially relevant experience
+        - 0-7: weak experience match
+
+
+        role_specific_score (0-20):
+        - Identify the specialized capabilities that are particularly important
+          to THIS specific role from the job description.
+        - Score how well the candidate demonstrates those capabilities.
+        - The specialty depends on the job.
+        - For example, an AI role may emphasize LLM/RAG/ML capabilities,
+          while a backend role may emphasize API architecture, distributed
+          systems, or enterprise integration.
+        - Do not assume AI, cloud, or any other specialty is required unless
+          the job description indicates it.
+        - Do not double-count general technical skills already evaluated in
+          technical_score.
+        - 17-20: very strong match
+        - 10-16: moderate match
+        - 1-9: limited match
+        - 0: no demonstrated match
+
+
+        tools_platform_score (0-10):
+        - Evaluate explicitly requested tools, frameworks, platforms,
+          databases, cloud services, libraries, and development technologies.
+        - Only evaluate technologies relevant to THIS job.
+        - Compare those technologies against technologies explicitly
+          demonstrated in the candidate profile.
+        - Do not double-count broader technical capability already evaluated
+          in technical_score or role_specific_score.
+        - 8-10: strong match
+        - 4-7: partial match
+        - 1-3: weak match
+        - 0: no demonstrated match
+
+
+        location_score (0-5):
+        - Evaluate whether the job's location and work arrangement fit
+          the candidate.
+        - 5: clearly compatible
+        - 3: unclear or potentially compatible
+        - 0: clearly incompatible
+
+
+        IMPORTANT SCORING RULES
+
+        - Score against THIS job's requirements, not against a generic ideal
+          candidate.
+        - Do not reward a candidate skill unless it is relevant to this job.
+        - Do not invent candidate skills or experience.
+        - Do not assume missing job requirements.
+        - Avoid double-counting the same qualification across categories.
+        - Missing information is not evidence of a match.
+
+        - If description_complete is False:
+            - treat the analysis as preliminary
+            - score only against requirements actually visible
+            - do not assume the snippet contains all requirements
+            - be conservative about the assessment
+            - confidence should normally be "Low" or "Medium"
+
+        - If description_complete is True:
+            - treat the description as the best available verified evidence
+            - use explicit location and work-arrangement requirements
+            - confidence may be "High" when the available evidence is clear
+
+        - confidence must be one of:
+            "High", "Medium", or "Low"
+
+        - strengths must contain qualifications from the candidate profile
+          that directly support this job.
+
+        - missing_skills must contain important job requirements that are
+          missing or not clearly demonstrated in the candidate profile.
+        """
+    )
+
+ # analyze one current_job and return the result
 def analyze_job(state: JobSearchState):
 
     current_job = state["current_job"]
@@ -440,138 +570,31 @@ def analyze_job(state: JobSearchState):
             "analyses": []
         }
 
+    analysis = score_job(
+        current_job,
+        candidate_profile
+    )
 
-    analysis = job_analysis_model.invoke(
-    f"""
-    Evaluate how well this candidate matches THIS specific job.
-
-    Candidate profile:
-    {candidate_profile}
-
-    Job title:
-    {current_job["title"]}
-
-    Company:
-    {current_job["company"]}
-
-    Location:
-    {current_job["location"]}
-
-    Job description:
-    {current_job["description"]}
-
-    Description source:
-    {current_job["description_source"]}
-
-    Description complete:
-    {current_job["description_complete"]}
-
-
-    SCORING GUIDANCE
-
-    technical_score (0-40):
-    - Evaluate the candidate's broader technical capability against the
-      core technical responsibilities of this job.
-    - Consider software engineering depth, architecture, development,
-      integration, problem solving, and other core technical capabilities
-      relevant to this job.
-    - Do not give points simply because the candidate has strong technical
-      skills that this job does not require.
-    - Do not double-count specific named tools, frameworks, or platforms
-      that belong in tools_platform_score.
-    - 35-40: excellent match
-    - 25-34: strong match with some gaps
-    - 15-24: partial match
-    - 0-14: weak match
-
-
-    experience_score (0-25):
-    - Evaluate years of experience, seniority, responsibilities, and
-      relevant professional background.
-    - Consider whether the candidate's experience level matches what
-      THIS job requires.
-    - 22-25: very strong experience match
-    - 15-21: generally relevant experience
-    - 8-14: partially relevant experience
-    - 0-7: weak experience match
-
-
-    role_specific_score (0-20):
-    - Identify the specialized capabilities that are particularly important
-      to THIS specific role from the job description.
-    - Score how well the candidate demonstrates those capabilities.
-    - The specialty depends on the job.
-    - For example, an AI role may emphasize LLM/RAG/ML capabilities,
-      while a backend role may emphasize API architecture, distributed
-      systems, or enterprise integration.
-    - Do not assume AI, cloud, or any other specialty is required unless
-      the job description indicates it.
-    - Do not double-count general technical skills already evaluated in
-      technical_score.
-    - 17-20: very strong match
-    - 10-16: moderate match
-    - 1-9: limited match
-    - 0: no demonstrated match
-
-
-    tools_platform_score (0-10):
-    - Evaluate explicitly requested tools, frameworks, platforms,
-      databases, cloud services, libraries, and development technologies.
-    - Only evaluate technologies relevant to THIS job.
-    - Compare those technologies against technologies explicitly
-      demonstrated in the candidate profile.
-    - Do not double-count broader technical capability already evaluated
-      in technical_score or role_specific_score.
-    - 8-10: strong match
-    - 4-7: partial match
-    - 1-3: weak match
-    - 0: no demonstrated match
-
-
-    location_score (0-5):
-    - Evaluate whether the job's location and work arrangement fit
-      the candidate.
-    - 5: clearly compatible
-    - 3: unclear or potentially compatible
-    - 0: clearly incompatible
-
-
-    IMPORTANT SCORING RULES
-
-    - Score against THIS job's requirements, not against a generic ideal
-      candidate.
-    - Do not reward a candidate skill unless it is relevant to this job.
-    - Do not invent candidate skills or experience.
-    - Do not assume missing job requirements.
-    - Avoid double-counting the same qualification across categories.
-    - Missing information is not evidence of a match.
-
-    - If description_complete is False:
-        - treat the analysis as preliminary
-        - score only against requirements actually visible
-        - do not assume the snippet contains all requirements
-        - be conservative about the recommendation
-        - confidence should normally be "Low" or "Medium"
-
-    - confidence must be one of:
-        "High", "Medium", or "Low"
-
-    - strengths must contain qualifications from the candidate profile
-      that directly support this job.
-
-    - missing_skills must contain important job requirements that are
-      missing or not clearly demonstrated in the candidate profile.
-
-    """
-    )   
-
-    
     match_score = (
         analysis.technical_score
         + analysis.experience_score
         + analysis.role_specific_score
         + analysis.tools_platform_score
         + analysis.location_score
+    )
+
+    preliminary_match_score = match_score
+
+    verification_status = (
+        "not_needed"
+        if current_job["description_complete"]
+        else "pending"
+    )
+
+    verification_priority = get_verification_priority(
+        current_job,
+        analysis,
+        match_score
     )
 
     if match_score >= 90 and analysis.confidence == "High":
@@ -583,39 +606,34 @@ def analyze_job(state: JobSearchState):
     else:
         recommendation = "Skip"
 
-    preliminary_match_score = match_score
-
-    if current_job["description_complete"]:
-        verification_status = "not_needed"
-    else:
-        verification_status = "pending"
-
-    verification_priority = get_verification_priority(
-    current_job,
-    analysis,
-    match_score
-    )
     return {
-    "analyses": [
-        {
-            "title": current_job["title"],
-            "company": current_job["company"],
-            "location": current_job["location"],
-            "url": current_job["url"],
+        "analyses": [
+            {
+                "title": current_job["title"],
+                "company": current_job["company"],
+                "location": current_job["location"],
+                "description": current_job["description"],
+                "description_source": current_job["description_source"],
+                "description_complete": current_job["description_complete"],
+                "url": current_job["url"],
+                "updated_date": current_job["updated_date"],
 
-            "preliminary_match_score": preliminary_match_score,
-            "match_score": match_score,
+                "preliminary_match_score": preliminary_match_score,
+                "match_score": match_score,
 
-            "verification_status": verification_status,
-            "verification_priority": verification_priority,
-            "needs_verification": not current_job["description_complete"],
+                "verification_status": verification_status,
+                "verification_priority": verification_priority,
+                "needs_verification": not current_job["description_complete"],
 
-            "recommendation": recommendation,
+                "recommendation": recommendation,
 
-            **analysis.model_dump()
-        }
-    ]
-}
+                **analysis.model_dump()
+            }
+        ]
+    }
+
+
+
 
 def verify_job(state: JobSearchState):
     current_job = state["current_job"]
@@ -804,3 +822,32 @@ def generate_report(state: JobSearchState):
     return {
         "final_report": "\n".join(lines)
     }
+
+def select_verification_candidates(state: JobSearchState):
+    candidates = [
+        job
+        for job in state["ranked_jobs"]
+        if (
+            job["needs_verification"]
+            and job["verification_priority"] in ["High", "Medium"]
+        )
+    ]
+
+    return {
+        "verification_candidates": candidates
+    }
+
+def send_verification_jobs(state: JobSearchState):
+    return [
+        Send(
+            "verify_job",
+            {
+                **state,
+                "current_job": job,
+            }
+        )
+        for job in state["verification_candidates"]
+    ]
+
+
+   

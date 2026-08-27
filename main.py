@@ -12,7 +12,7 @@ from app.tools.resume_reader import read_docx_resume
 resume_text = read_docx_resume("data/resume.docx")
 
 initial_state = {
-   "search_request": "Find remote Senior AI Engineer jobs from the last 1 day",
+   "search_request": "Find remote Senior AI Engineer jobs from the last 7 day",
     "role": "",
     "location": "",
     "employment_type": "",
@@ -26,7 +26,8 @@ initial_state = {
     "final_report": "",
     "resume_text": resume_text,
     "candidate_profile": {},
-    "verified_jobs": []
+    "verified_jobs": [],
+    "verified_analyses": [],
 }
 
 result = graph.invoke(initial_state)
@@ -66,3 +67,17 @@ for job in result["selected_jobs"]:
 print("\nFINAL REPORT")
 print(result["final_report"])
 
+print(
+   
+    "verification candidates:",
+    len(result.get("verification_candidates", []))
+)
+
+for job in result.get("verification_candidates", []):
+    print(
+        job["match_score"],
+        "-",
+        job["title"],
+        "- priority:",
+        job["verification_priority"],
+    )
