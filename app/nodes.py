@@ -161,6 +161,7 @@ def search_jobs(state: JobSearchState):
             "location": raw_job.get("location", ""),
             "description": clean_html_text(raw_job.get("snippet", "")),
             "url": raw_job.get("link", ""),
+            "source_url": raw_job.get("link", ""),
             "updated_date": updated_text,
             "source": raw_job.get("source", ""),
             "description_source": "jooble_snippet",
@@ -616,6 +617,7 @@ def analyze_job(state: JobSearchState):
                 "description_source": current_job["description_source"],
                 "description_complete": current_job["description_complete"],
                 "url": current_job["url"],
+                "source_url": current_job["source_url"],
                 "updated_date": current_job["updated_date"],
 
                 "preliminary_match_score": preliminary_match_score,
@@ -758,6 +760,9 @@ def verify_job(state: JobSearchState):
             ]
         }
 
+def collect_verified_jobs(state: JobSearchState):
+    return {}
+
 
 def rank_jobs(state: JobSearchState):
     ranked = sorted(
@@ -771,7 +776,7 @@ def rank_jobs(state: JobSearchState):
     }
 
 
-def select_jobs(state: JobSearchState):
+def select_jobs_Old(state: JobSearchState):
     selected = [
         job
         for job in state["ranked_jobs"]
@@ -796,6 +801,25 @@ def select_jobs(state: JobSearchState):
         "selected_jobs": selected
     }
 
+
+def select_jobs(state: JobSearchState):
+    selected = [
+        job
+        for job in state["final_ranked_jobs"]
+        if (
+            job["recommendation"] in ["Strong Apply", "Apply"]
+            and job["match_score"] >= 75
+        )
+    ]
+
+    selected = sorted(
+        selected,
+        key=lambda job: -job["match_score"]
+    )
+
+    return {
+        "selected_jobs": selected
+    }
 
 def generate_report(state: JobSearchState):
     selected_jobs = state["selected_jobs"]
@@ -850,4 +874,87 @@ def send_verification_jobs(state: JobSearchState):
     ]
 
 
-   
+
+def analyze_verified_job(state: JobSearchState):
+    current_job = state["current_job"]
+    candidate_profile = state["candidate_profile"]
+
+    if current_job is None:
+        return {
+            "verified_analyses": []
+        }
+
+    if current_job.get("verification_status") != "verified":
+        return {
+            "verified_analyses": []
+        }
+
+    analysis = score_job(
+        current_job,
+        candidate_profile
+    )
+
+    match_score = (
+        analysis.technical_score
+        + analysis.experience_score
+        + analysis.role_specific_score
+        + analysis.tools_platform_score
+        + analysis.location_score
+    )
+
+    if match_score >= 90 and analysis.confidence == "High":
+        recommendation = "Strong Apply"
+    elif match_score >= 75:
+        recommendation = "Apply"
+    elif match_score >= 60:
+        recommendation = "Maybe"
+    else:
+        recommendation = "Skip"
+
+    return {
+        "verified_analyses": [
+            {
+                **current_job,
+                **analysis.model_dump(),
+
+                "preliminary_match_score":
+                    current_job["preliminary_match_score"],
+
+                "match_score": match_score,
+
+                "verification_status": "verified",
+                "needs_verification": False,
+                "recommendation": recommendation,
+            }
+        ]
+    }
+
+
+def send_verified_jobs_for_analysis(state: JobSearchState):
+    return [
+        Send(
+            "analyze_verified_job",
+            {
+                **state,
+                "current_job": job,
+            }
+        )
+        for job in state["verified_jobs"]
+        if job.get("verification_status") == "verified"
+    ]
+
+def final_rank_jobs(state: JobSearchState):
+    verified_analyses = state["verified_analyses"]
+
+    final_jobs = sorted(
+        verified_analyses,
+        key=lambda job: job["match_score"],
+        reverse=True
+    )
+
+    return {
+        "final_ranked_jobs": final_jobs
+    }
+
+def collect_verified_analyses(state: JobSearchState):
+    return {}

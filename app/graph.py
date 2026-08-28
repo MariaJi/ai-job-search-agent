@@ -14,7 +14,11 @@ from app.nodes import (
     select_verification_candidates,
     verify_job,
     send_verification_jobs,
-  
+    analyze_verified_job,
+    send_verified_jobs_for_analysis,
+    collect_verified_jobs,
+    final_rank_jobs,
+    collect_verified_analyses,
 )
 
 
@@ -47,10 +51,32 @@ builder.add_node(
     "select_verification_candidates",
     select_verification_candidates
 )
+
+builder.add_node(
+    "collect_verified_analyses",
+    collect_verified_analyses
+)
+
 builder.add_node(
     "extract_candidate_profile",
     extract_candidate_profile
 )
+
+builder.add_node(
+    "collect_verified_jobs",
+    collect_verified_jobs
+)
+
+builder.add_node(
+    "analyze_verified_job",
+    analyze_verified_job
+)
+
+builder.add_node(
+    "final_rank_jobs",
+    final_rank_jobs
+)
+
 # Edges
 builder.add_edge(START, "understand_search_request")
 
@@ -85,6 +111,30 @@ builder.add_conditional_edges(
     send_verification_jobs,
     ["verify_job"],
 )
+builder.add_edge(
+    "verify_job",
+    "collect_verified_jobs"
+)
+
+builder.add_conditional_edges(
+    "collect_verified_jobs",
+    send_verified_jobs_for_analysis,
+    ["analyze_verified_job"],
+)
+builder.add_edge(
+    "analyze_verified_job",
+    "collect_verified_analyses"
+)
+
+builder.add_edge(
+    "collect_verified_analyses",
+    "final_rank_jobs"
+)
+builder.add_edge(
+    "final_rank_jobs",
+    "select_jobs"
+)
+
 builder.add_edge("select_jobs", "generate_report")
 builder.add_edge("generate_report", END)
 

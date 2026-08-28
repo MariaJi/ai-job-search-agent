@@ -19,16 +19,21 @@ class JobSearchState(TypedDict):
     location: str
     employment_type: str
     days_old: int
+
     jobs: list[Job]
     current_job: Job | None
-  
-    analyses: Annotated[list[dict], operator.add]
-    ranked_jobs: list[dict]
-    selected_jobs: list[dict]
-    final_report: str
-    
+
     resume_text: str
     candidate_profile: dict
-    verified_jobs: Annotated[list[dict], operator.add]
+
+    analyses: Annotated[list[dict], operator.add]
+    ranked_jobs: list[dict]
+
     verification_candidates: list[dict]
+    verified_jobs: Annotated[list[dict], operator.add]
     verified_analyses: Annotated[list[dict], operator.add]
+
+    final_ranked_jobs: list[dict]
+    selected_jobs: list[dict]
+
+    final_report: str
