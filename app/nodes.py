@@ -663,7 +663,20 @@ def verify_job(state: JobSearchState):
             company=current_job["company"],
         )
 
+        print(
+            "\nVERIFY:",
+            current_job["title"],
+            "@",
+             current_job["company"]
+        )
+
+        print(
+            "search_original_job results:",
+            len(search_results)
+        )
+        
         if not search_results:
+            print("FAILED: search_original_job returned 0 results")
             return {
                 "verified_jobs": [
                     {
@@ -679,6 +692,10 @@ def verify_job(state: JobSearchState):
             search_results=search_results,
         )
 
+        print("\nBEST SOURCE:")
+        print(best_source)
+      
+
         if best_source is None:
             return {
                 "verified_jobs": [
@@ -689,32 +706,10 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
-        # Step 3: search specifically within that source
-        source_results = search_job_on_source(
-            title=current_job["title"],
-            company=current_job["company"],
-            source_url=best_source["url"],
-        )
 
-        # Step 4: identify exact posting
-        exact_job = select_exact_job_posting(
-            job=current_job,
-            search_results=source_results,
-        )
-
-        if exact_job is None:
-            return {
-                "verified_jobs": [
-                    {
-                        **current_job,
-                        "verification_status": "not_found",
-                    }
-                ]
-            }
-
-        # Step 5: retrieve full JD
+        # Step 3: retrieve full JD
         extraction = extract_job_description(
-            exact_job["url"]
+             best_source["url"]
         )
 
         if extraction["status"] != "success":
@@ -735,7 +730,7 @@ def verify_job(state: JobSearchState):
             "description_source": extraction["source"],
             "description_complete": True,
 
-            "url": exact_job["url"],
+            "url": best_source["url"],
 
             "verification_status": "verified",
             "needs_verification": False,

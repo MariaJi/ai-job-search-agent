@@ -80,7 +80,18 @@ for job in result.get("verified_jobs", []):
         job.get("description_complete"),
     )
 
-    
+print("\nFINAL VERIFIED JOBS")
+
+for job in result.get("final_ranked_jobs", []):
+    print(
+        job["title"],
+        "- preliminary:",
+        job.get("preliminary_match_score"),
+        "- verified:",
+        job.get("match_score"),
+        "- status:",
+        job.get("verification_status"),
+    )   
 
 # for job in result["analyses"]:
 #     print(
