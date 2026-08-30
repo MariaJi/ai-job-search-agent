@@ -57,6 +57,11 @@ class JobSourceMatch(BaseModel):
     reason: str
 
 
+class ExtractedJobValidation(BaseModel):
+    is_same_job: bool
+    confidence: str
+    reason: str
+
 model = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
@@ -298,119 +303,6 @@ def get_title_match_score(
         candidate
     ).ratio()
 
-#originla select_best_job_source function, right now use rank_job_sources
-def select_best_job_source(
-    job: Job,
-    search_results: list[dict]
-) -> dict | None:
-
-    matched_results = []
-
-    confidence_rank = {
-        "High": 3,
-        "Medium": 2,
-        "Low": 1,
-    }
-
-    for result in search_results:
-        match = evaluate_job_source_match(
-            job=job,
-            search_result=result
-        )
-
-       
-
-        if not match.is_same_job:
-            continue
-
-       
-
-        confidence_score = confidence_rank.get(
-            match.confidence,
-            0
-        ) 
-
-        source_quality = get_source_quality(
-            result["url"],
-            job["company"]
-        )
-
-        title_match_score = get_title_match_score(
-            job["title"],
-            result["title"]
-        )
-
-        selection_score = (
-            title_match_score * 0.6
-            + (source_quality / 4) * 0.3
-            + (confidence_score / 3) * 0.1
-        )
-      
-        # matched_results.append({
-        #     "result": result,
-        #     "confidence": match.confidence,
-        #     "confidence_score": confidence_rank.get(
-        #         match.confidence,
-        #         0
-        #     ),
-        #     "title_match_score": title_match_score,
-        #     "source_quality": get_source_quality(
-        #         result["url"],
-        #         job["company"]
-        #     ),
-        #     "reason": match.reason,
-        # })
-
-        matched_results.append({
-        "result": result,
-        "confidence": match.confidence,
-        "confidence_score": confidence_score,
-        "title_match_score": title_match_score,
-        "source_quality": source_quality,
-        "selection_score": selection_score,
-        "reason": match.reason,
-        })
-
-    if not matched_results:
-        return None
-
-    
-    # matched_results.sort(
-    #     key=lambda item: (
-    #         item["title_match_score"],
-    #         item["source_quality"],
-    #         item["confidence_score"],
-    #     ),
-    #     reverse=True
-    # )   
-    matched_results.sort(
-        key=lambda item: item["selection_score"],
-        reverse=True
-    )
-    best = matched_results[0]
-  
-    for item in matched_results:
-         print(
-        "\nMATCHED SOURCE:",
-        item["result"]["url"],
-        "- title_score:",
-        round(item["title_match_score"], 3),
-        "- source_quality:",
-        item["source_quality"],
-        "- confidence:",
-        item["confidence"],
-        "- selection_score:",
-        round(item["selection_score"], 3),
-    )
-         
-    return {
-        "title": best["result"]["title"],
-        "url": best["result"]["url"],
-        "content": best["result"]["content"],
-        "match_confidence": best["confidence"],
-        "source_quality": best["source_quality"],
-        "match_reason": best["reason"],
-    }
 
 def rank_job_sources(
     job: Job,
@@ -492,6 +384,70 @@ def rank_job_sources(
     ]
 
 
+def validate_extracted_job(
+    job: Job,
+    source: dict,
+    extracted_description: str
+) -> ExtractedJobValidation:
+
+    validator = model.with_structured_output(
+        ExtractedJobValidation
+    )
+
+    return validator.invoke(
+        f"""
+        Determine whether the extracted job description belongs to
+        the SAME specific job as the original job candidate.
+
+        ORIGINAL JOB
+
+        Title:
+        {job["title"]}
+
+        Company:
+        {job["company"]}
+
+        Location:
+        {job["location"]}
+
+        Original description snippet:
+        {job["description"]}
+
+
+        CANDIDATE SOURCE
+
+        Title:
+        {source["title"]}
+
+        URL:
+        {source["url"]}
+
+
+        EXTRACTED JOB DESCRIPTION
+
+        {extracted_description}
+
+
+        VALIDATION RULES
+
+        - The company must match.
+        - The role must represent the same specific position, not merely
+          a similar job at the same company.
+        - Compare the job title and seniority carefully.
+        - Compare location or work arrangement when available.
+        - Compare distinctive technologies, responsibilities, domain,
+          team, and job-specific wording.
+        - A slightly different title is acceptable when the responsibilities
+          clearly identify the same position.
+        - A similar role at the same company is NOT sufficient.
+        - If important evidence conflicts, return is_same_job=False.
+        - If there is not enough evidence to confidently establish that
+          this is the same posting, return is_same_job=False.
+
+        confidence must be one of:
+        "High", "Medium", or "Low".
+        """
+    )
 
 def select_exact_job_posting(
     job: Job,
@@ -850,22 +806,58 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
-
-        # best_source = ranked_sources[0]
-
         successful_extraction = None
         description_source = None
 
         # Step 3: try sources in ranked order
+        # for source in ranked_sources:
+        #     extraction = extract_job_description(
+        #     source["url"]
+        # )   
+
+        #     if extraction["status"] == "success":
+        #         successful_extraction = extraction
+        #         description_source = source
+        #         break
+
         for source in ranked_sources:
             extraction = extract_job_description(
             source["url"]
-        )   
+            )
 
-            if extraction["status"] == "success":
-                successful_extraction = extraction
-                description_source = source
-                break
+            if extraction["status"] != "success":
+                continue
+
+            validation = validate_extracted_job(
+                job=current_job,
+                source=source,
+                extracted_description=extraction["content"],
+            )
+
+            if not validation.is_same_job:
+                print(
+                    "REJECTED SOURCE:",
+                    source["url"],
+                    "- confidence:",
+                    validation.confidence,
+                    "- reason:",
+                    validation.reason,
+                )
+                continue
+
+            print(
+                "\nACCEPTED SOURCE:",
+                source["url"],
+                "\nSOURCE TITLE:",
+                source["title"],
+                "\nVALIDATION CONFIDENCE:",
+                validation.confidence,
+                "\nVALIDATION REASON:",
+                validation.reason,
+            )
+            successful_extraction = extraction
+            description_source = source
+            break
 
         if successful_extraction is None:
             return {
