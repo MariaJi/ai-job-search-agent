@@ -298,6 +298,7 @@ def get_title_match_score(
         candidate
     ).ratio()
 
+#originla select_best_job_source function, right now use rank_job_sources
 def select_best_job_source(
     job: Job,
     search_results: list[dict]
@@ -410,6 +411,87 @@ def select_best_job_source(
         "source_quality": best["source_quality"],
         "match_reason": best["reason"],
     }
+
+def rank_job_sources(
+    job: Job,
+    search_results: list[dict]
+) -> list[dict]:
+
+    matched_results = []
+
+    confidence_rank = {
+        "High": 3,
+        "Medium": 2,
+        "Low": 1,
+    }
+
+    for result in search_results:
+        match = evaluate_job_source_match(
+            job=job,
+            search_result=result
+        )
+
+        if not match.is_same_job:
+            continue
+
+       
+
+        confidence_score = confidence_rank.get(
+            match.confidence,
+            0
+        ) 
+
+        source_quality = get_source_quality(
+            result["url"],
+            job["company"]
+        )
+
+        title_match_score = get_title_match_score(
+            job["title"],
+            result["title"]
+        )
+
+        selection_score = (
+            title_match_score * 0.6
+            + (source_quality / 4) * 0.3
+            + (confidence_score / 3) * 0.1
+        )
+
+
+        matched_results.append({
+        "result": result,
+        "confidence": match.confidence,
+        "confidence_score": confidence_score,
+        "title_match_score": title_match_score,
+        "source_quality": source_quality,
+        "selection_score": selection_score,
+        "reason": match.reason,
+        })
+
+    if not matched_results:
+         return []
+
+    
+   
+    matched_results.sort(
+        key=lambda item: item["selection_score"],
+        reverse=True
+    )
+   
+    return [
+        {
+            "title": item["result"]["title"],
+            "url": item["result"]["url"],
+            "content": item["result"]["content"],
+            "match_confidence": item["confidence"],
+            "source_quality": item["source_quality"],
+            "selection_score": item["selection_score"],
+            "match_reason": item["reason"],
+        }
+        for item in matched_results
+    ]
+
+
 
 def select_exact_job_posting(
     job: Job,
@@ -751,17 +833,14 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
-        # Step 2: choose strongest trusted source
-        best_source = select_best_job_source(
+        # Step 2: rank sources
+        ranked_sources = rank_job_sources(
             job=current_job,
             search_results=search_results,
         )
-
-        print("\nBEST SOURCE:")
-        print(best_source)
-      
-
-        if best_source is None:
+        
+        
+        if not ranked_sources:
             return {
                 "verified_jobs": [
                     {
@@ -772,12 +851,23 @@ def verify_job(state: JobSearchState):
             }
 
 
-        # Step 3: retrieve full JD
-        extraction = extract_job_description(
-             best_source["url"]
-        )
+        # best_source = ranked_sources[0]
 
-        if extraction["status"] != "success":
+        successful_extraction = None
+        description_source = None
+
+        # Step 3: try sources in ranked order
+        for source in ranked_sources:
+            extraction = extract_job_description(
+            source["url"]
+        )   
+
+            if extraction["status"] == "success":
+                successful_extraction = extraction
+                description_source = source
+                break
+
+        if successful_extraction is None:
             return {
                 "verified_jobs": [
                     {
@@ -787,16 +877,24 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
+        # Temporary debugging  
+
+        print(
+            "DESCRIPTION SOURCE:",
+            description_source["url"],
+            "- selection_score:",
+            round(description_source["selection_score"], 3)
+        )
+
         # Successfully verified + enriched.
         verified_job = {
-            **current_job,
-
-            "description": extraction["content"],
-            "description_source": extraction["source"],
+            **current_job,        
+            "description": successful_extraction["content"],
+            "description_source": successful_extraction["source"],
             "description_complete": True,
 
-            "url": best_source["url"],
-
+            "url": description_source["url"],
+            "description_url": description_source["url"],
             "verification_status": "verified",
             "needs_verification": False,
         }
@@ -819,6 +917,7 @@ def verify_job(state: JobSearchState):
                 }
             ]
         }
+
 
 def collect_verified_jobs(state: JobSearchState):
     return {}
