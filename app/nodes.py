@@ -1,3 +1,5 @@
+from unittest import result
+
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
@@ -8,7 +10,7 @@ from app.tools.web_search import (
     search_job_on_source,
     extract_job_description,
 )
-
+from difflib import SequenceMatcher
 from langgraph.types import Send
 import html
 import re
@@ -282,6 +284,20 @@ def get_source_quality(url: str, company: str) -> int:
 
     return 0
 
+def get_title_match_score(
+    original_title: str,
+    candidate_title: str
+) -> float:
+
+    original = original_title.lower().strip()
+    candidate = candidate_title.lower().strip()
+
+    return SequenceMatcher(
+        None,
+        original,
+        candidate
+    ).ratio()
+
 def select_best_job_source(
     job: Job,
     search_results: list[dict]
@@ -301,42 +317,91 @@ def select_best_job_source(
             search_result=result
         )
 
+       
+
         if not match.is_same_job:
             continue
 
+       
+
+        confidence_score = confidence_rank.get(
+            match.confidence,
+            0
+        ) 
+
+        source_quality = get_source_quality(
+            result["url"],
+            job["company"]
+        )
+
+        title_match_score = get_title_match_score(
+            job["title"],
+            result["title"]
+        )
+
+        selection_score = (
+            title_match_score * 0.6
+            + (source_quality / 4) * 0.3
+            + (confidence_score / 3) * 0.1
+        )
+      
+        # matched_results.append({
+        #     "result": result,
+        #     "confidence": match.confidence,
+        #     "confidence_score": confidence_rank.get(
+        #         match.confidence,
+        #         0
+        #     ),
+        #     "title_match_score": title_match_score,
+        #     "source_quality": get_source_quality(
+        #         result["url"],
+        #         job["company"]
+        #     ),
+        #     "reason": match.reason,
+        # })
+
         matched_results.append({
-            "result": result,
-            "confidence": match.confidence,
-            "confidence_score": confidence_rank.get(
-                match.confidence,
-                0
-            ),
-            "source_quality": get_source_quality(
-                result["url"],
-                job["company"]
-            ),
-            "reason": match.reason,
+        "result": result,
+        "confidence": match.confidence,
+        "confidence_score": confidence_score,
+        "title_match_score": title_match_score,
+        "source_quality": source_quality,
+        "selection_score": selection_score,
+        "reason": match.reason,
         })
 
     if not matched_results:
         return None
 
+    
+    # matched_results.sort(
+    #     key=lambda item: (
+    #         item["title_match_score"],
+    #         item["source_quality"],
+    #         item["confidence_score"],
+    #     ),
+    #     reverse=True
+    # )   
     matched_results.sort(
-        key=lambda item: (
-            item["source_quality"],
-            item["confidence_score"],
-        ),
+        key=lambda item: item["selection_score"],
         reverse=True
     )
-
     best = matched_results[0]
+  
     for item in matched_results:
-        print(
-            "\nMATCHED SOURCE:",
-            item["result"]["url"],
-            "- confidence:", item["confidence"],
-            "- source_quality:", item["source_quality"]
-        )
+         print(
+        "\nMATCHED SOURCE:",
+        item["result"]["url"],
+        "- title_score:",
+        round(item["title_match_score"], 3),
+        "- source_quality:",
+        item["source_quality"],
+        "- confidence:",
+        item["confidence"],
+        "- selection_score:",
+        round(item["selection_score"], 3),
+    )
+         
     return {
         "title": best["result"]["title"],
         "url": best["result"]["url"],
