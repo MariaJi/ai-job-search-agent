@@ -779,7 +779,7 @@ def verify_job(state: JobSearchState):
         )
         
         if not search_results:
-            print("FAILED: search_original_job returned 0 results")
+            
             return {
                 "verified_jobs": [
                     {
@@ -809,17 +809,7 @@ def verify_job(state: JobSearchState):
         successful_extraction = None
         description_source = None
 
-        # Step 3: try sources in ranked order
-        # for source in ranked_sources:
-        #     extraction = extract_job_description(
-        #     source["url"]
-        # )   
-
-        #     if extraction["status"] == "success":
-        #         successful_extraction = extraction
-        #         description_source = source
-        #         break
-
+        
         for source in ranked_sources:
             extraction = extract_job_description(
             source["url"]
@@ -835,26 +825,10 @@ def verify_job(state: JobSearchState):
             )
 
             if not validation.is_same_job:
-                print(
-                    "REJECTED SOURCE:",
-                    source["url"],
-                    "- confidence:",
-                    validation.confidence,
-                    "- reason:",
-                    validation.reason,
-                )
+                
                 continue
 
-            print(
-                "\nACCEPTED SOURCE:",
-                source["url"],
-                "\nSOURCE TITLE:",
-                source["title"],
-                "\nVALIDATION CONFIDENCE:",
-                validation.confidence,
-                "\nVALIDATION REASON:",
-                validation.reason,
-            )
+          
             successful_extraction = extraction
             description_source = source
             break
@@ -869,14 +843,7 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
-        # Temporary debugging  
-
-        print(
-            "DESCRIPTION SOURCE:",
-            description_source["url"],
-            "- selection_score:",
-            round(description_source["selection_score"], 3)
-        )
+    
 
         # Successfully verified + enriched.
         verified_job = {
