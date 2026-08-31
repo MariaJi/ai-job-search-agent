@@ -913,16 +913,27 @@ def verify_job(state: JobSearchState):
         }
 
     except Exception as exc:
+        error_message = str(exc)
+
         print(
             f"Verification failed for "
-            f"{current_job['title']}: {exc}"
+            f"{current_job['title']}: {error_message}"
         )
+
+        if (
+            "usage limit" in error_message.lower()
+            or "rate limit" in error_message.lower()
+            or "quota" in error_message.lower()
+        ):
+            verification_status = "service_error"
+        else:
+            verification_status = "failed"
 
         return {
             "verified_jobs": [
                 {
                     **current_job,
-                    "verification_status": "failed",
+                    "verification_status": verification_status,
                 }
             ]
         }
@@ -992,7 +1003,35 @@ def select_jobs(state: JobSearchState):
 
 def generate_report(state: JobSearchState):
     selected_jobs = state["selected_jobs"]
+    verified_jobs = state["verified_jobs"]
 
+    service_errors = [
+        job
+        for job in verified_jobs
+        if job.get("verification_status") == "service_error"
+    ]
+    service_warning = ""
+
+    if service_errors:
+        service_warning = (
+            f"\n\nNote: {len(service_errors)} job(s) could not be verified "
+            f"because the external verification service was unavailable "
+            f"or reached its usage limit."
+        )
+   
+    if (
+        not selected_jobs
+        and verified_jobs
+        and len(service_errors) == len(verified_jobs)
+    ):
+        return {
+            "final_report": (
+                "Job verification could not be completed because "
+                "the external verification service is unavailable "
+                "or has reached its usage limit."
+            )
+        }
+   
     if not selected_jobs:
         return {
             "final_report": "No strong verified job matches were found."
@@ -1020,7 +1059,7 @@ def generate_report(state: JobSearchState):
         )
 
     return {
-        "final_report": "\n".join(lines)
+         "final_report": "\n".join(lines) + service_warning
     }
 
 def select_verification_candidates(state: JobSearchState):
