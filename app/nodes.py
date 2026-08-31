@@ -766,17 +766,6 @@ def verify_job(state: JobSearchState):
             company=current_job["company"],
         )
 
-        print(
-            "\nVERIFY:",
-            current_job["title"],
-            "@",
-             current_job["company"]
-        )
-
-        print(
-            "search_original_job results:",
-            len(search_results)
-        )
         
         if not search_results:
             
@@ -846,18 +835,43 @@ def verify_job(state: JobSearchState):
     
 
         # Successfully verified + enriched.
+        # verified_job_Old = {
+        #     **current_job,        
+        #     "description": successful_extraction["content"],
+        #     "description_source": successful_extraction["source"],
+        #     "description_complete": True,
+
+        #     # "url": description_source["url"],
+        #     "description_url": description_source["url"],
+        #     "verification_status": "verified",
+        #     "needs_verification": False,
+
+        #     "source_url": current_job.get(
+        #             "source_url",
+        #             current_job.get("url")
+        #         ),
+
+        #     "verified_url": description_source["url"],
+        #     "description_url": description_source["url"],
+        # }
+
         verified_job = {
-            **current_job,        
+            **current_job,
+
             "description": successful_extraction["content"],
             "description_source": successful_extraction["source"],
             "description_complete": True,
 
-            "url": description_source["url"],
+            "source_url": current_job.get(
+            "source_url",
+            current_job.get("url")
+            ),
+            "verified_url": description_source["url"],
             "description_url": description_source["url"],
+
             "verification_status": "verified",
             "needs_verification": False,
         }
-
         return {
             "verified_jobs": [verified_job]
         }
@@ -939,7 +953,7 @@ def select_jobs(state: JobSearchState):
         "selected_jobs": selected
     }
 
-def generate_report(state: JobSearchState):
+def generate_report_Old(state: JobSearchState):
     selected_jobs = state["selected_jobs"]
 
     if not selected_jobs:
@@ -959,6 +973,38 @@ def generate_report(state: JobSearchState):
             f"{'Yes' if job['needs_verification'] else 'No'}\n"
             f"Location: {job['location']}\n"
             f"URL: {job['url']}\n\n"
+        )
+
+    return {
+        "final_report": "\n".join(lines)
+    }
+
+def generate_report(state: JobSearchState):
+    selected_jobs = state["selected_jobs"]
+
+    if not selected_jobs:
+        return {
+            "final_report": "No strong verified job matches were found."
+        }
+
+    lines = []
+
+    for index, job in enumerate(selected_jobs, start=1):
+        strengths = job.get("strengths", [])
+        missing_skills = job.get("missing_skills", [])
+
+        lines.append(
+            f"{index}. {job['title']} at {job['company']}\n"
+            f"Verified Match Score: {job['match_score']}\n"
+            f"Preliminary Score: {job.get('preliminary_match_score', 'N/A')}\n"
+            f"Recommendation: {job['recommendation']}\n"
+            f"Confidence: {job['confidence']}\n"
+            f"Location: {job['location']}\n"
+            f"Verification Status: {job.get('verification_status', 'verified')}\n"
+            
+            f"URL: {job.get('verified_url', job.get('url', 'N/A'))}\n"
+            f"Strengths: {', '.join(strengths) if strengths else 'None listed'}\n"
+            f"Missing Skills: {', '.join(missing_skills) if missing_skills else 'None identified'}\n"
         )
 
     return {

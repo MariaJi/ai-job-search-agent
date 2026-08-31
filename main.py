@@ -40,6 +40,9 @@ initial_state = {
 }
 
 result = graph.invoke(initial_state)
+print("\nFINAL REPORT\n")
+print(result["final_report"])
+
 print("days_old:", result["days_old"])
 print("jobs found:", len(result["jobs"]))
 
@@ -93,48 +96,3 @@ for job in result.get("final_ranked_jobs", []):
         job.get("verification_status"),
     )   
 
-# for job in result["analyses"]:
-#     print(
-#         job["title"],
-#         "- preliminary:", job["preliminary_match_score"],
-#         "- current:", job["match_score"],
-#         "- priority:", job["verification_priority"],
-#         "- status:", job["verification_status"],
-#         "- needs verification:", job["needs_verification"],
-#     )   
-
-# print("ranked jobs:", len(result["ranked_jobs"]))
-
-# print("selected jobs:", len(result["selected_jobs"]))
-
-
-# for job in result["selected_jobs"]:
-#     print(
-#         job["match_score"],
-#         "-",
-#         job["title"],
-#         "- Technical:", job["technical_score"],
-#         "- Experience:", job["experience_score"],
-#         "- Role-specific:", job["role_specific_score"],
-#         "- Tools/Platform:", job["tools_platform_score"],
-#         "- Location:", job["location_score"],
-#         "- Confidence:", job["confidence"],
-#     )
-
-# print("\nFINAL REPORT")
-# print(result["final_report"])
-
-# print(
-   
-#     "verification candidates:",
-#     len(result.get("verification_candidates", []))
-# )
-
-# for job in result.get("verification_candidates", []):
-#     print(
-#         job["match_score"],
-#         "-",
-#         job["title"],
-#         "- priority:",
-#         job["verification_priority"],
-#     )
