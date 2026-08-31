@@ -62,6 +62,12 @@ class ExtractedJobValidation(BaseModel):
     confidence: str
     reason: str
 
+class VerifiedJobMetadata(BaseModel):
+    title: str
+    company: str
+    location: str
+    employment_type: str | None = None
+
 model = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
@@ -738,6 +744,43 @@ def analyze_job(state: JobSearchState):
     }
 
 
+def extract_verified_job_metadata(
+    source: dict,
+    extracted_description: str
+) -> VerifiedJobMetadata:
+
+    extractor = model.with_structured_output(
+        VerifiedJobMetadata
+    )
+
+    return extractor.invoke(
+        f"""
+        Extract the job metadata from this verified job posting.
+
+        SOURCE TITLE:
+        {source["title"]}
+
+        SOURCE URL:
+        {source["url"]}
+
+        FULL JOB DESCRIPTION:
+        {extracted_description}
+
+        Extract:
+        - title
+        - company
+        - location
+        - employment_type
+
+        Rules:
+        - Use only information supported by the job posting.
+        - Do not guess missing information.
+        - Preserve remote/hybrid information when stated.
+        - employment_type should be values such as
+          Full-time, Part-time, Contract, Temporary, or Internship.
+        """
+    )
+
 
 
 def verify_job(state: JobSearchState):
@@ -832,39 +875,32 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
-    
+        verified_metadata = extract_verified_job_metadata(
+            source=description_source,
+            extracted_description=successful_extraction["content"],
+        )
 
-        # Successfully verified + enriched.
-        # verified_job_Old = {
-        #     **current_job,        
-        #     "description": successful_extraction["content"],
-        #     "description_source": successful_extraction["source"],
-        #     "description_complete": True,
-
-        #     # "url": description_source["url"],
-        #     "description_url": description_source["url"],
-        #     "verification_status": "verified",
-        #     "needs_verification": False,
-
-        #     "source_url": current_job.get(
-        #             "source_url",
-        #             current_job.get("url")
-        #         ),
-
-        #     "verified_url": description_source["url"],
-        #     "description_url": description_source["url"],
-        # }
 
         verified_job = {
             **current_job,
+
+            "location": (
+            verified_metadata.location
+            or current_job["location"]
+            ),
+
+            "employment_type": (
+            verified_metadata.employment_type
+            or current_job.get("employment_type", "")
+            ),
 
             "description": successful_extraction["content"],
             "description_source": successful_extraction["source"],
             "description_complete": True,
 
             "source_url": current_job.get(
-            "source_url",
-            current_job.get("url")
+                "source_url",
+                current_job.get("url")
             ),
             "verified_url": description_source["url"],
             "description_url": description_source["url"],
@@ -953,31 +989,6 @@ def select_jobs(state: JobSearchState):
         "selected_jobs": selected
     }
 
-def generate_report_Old(state: JobSearchState):
-    selected_jobs = state["selected_jobs"]
-
-    if not selected_jobs:
-        return {
-            "final_report": "No strong job matches were found."
-        }
-
-    lines = []
-
-    for job in selected_jobs:
-        lines.append(
-            f"{job['match_score']} - "
-            f"{job['title']} at {job['company']} - "
-            f"{job['recommendation']}\n"
-            f"Confidence: {job['confidence']}\n"
-            f"Needs verification: "
-            f"{'Yes' if job['needs_verification'] else 'No'}\n"
-            f"Location: {job['location']}\n"
-            f"URL: {job['url']}\n\n"
-        )
-
-    return {
-        "final_report": "\n".join(lines)
-    }
 
 def generate_report(state: JobSearchState):
     selected_jobs = state["selected_jobs"]
@@ -1000,6 +1011,7 @@ def generate_report(state: JobSearchState):
             f"Recommendation: {job['recommendation']}\n"
             f"Confidence: {job['confidence']}\n"
             f"Location: {job['location']}\n"
+            f"Employment Type: {job.get('employment_type', 'N/A')}\n"
             f"Verification Status: {job.get('verification_status', 'verified')}\n"
             
             f"URL: {job.get('verified_url', job.get('url', 'N/A'))}\n"
