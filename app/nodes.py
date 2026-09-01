@@ -1,5 +1,5 @@
 from unittest import result
-
+import os
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
@@ -1062,7 +1062,12 @@ def generate_report(state: JobSearchState):
          "final_report": "\n".join(lines) + service_warning
     }
 
+
 def select_verification_candidates(state: JobSearchState):
+    max_verification_jobs = int(
+        os.getenv("MAX_VERIFICATION_JOBS", "2")
+    )
+
     candidates = [
         job
         for job in state["ranked_jobs"]
@@ -1071,6 +1076,11 @@ def select_verification_candidates(state: JobSearchState):
             and job["verification_priority"] in ["High", "Medium"]
         )
     ]
+
+    if max_verification_jobs <= 0:
+        candidates = []
+    else:
+        candidates = candidates[:max_verification_jobs]
 
     return {
         "verification_candidates": candidates

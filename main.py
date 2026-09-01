@@ -42,7 +42,10 @@ initial_state = {
 result = graph.invoke(initial_state)
 print("\nFINAL REPORT\n")
 print(result["final_report"])
-
+print(
+    "verification_candidates:",
+    len(result["verification_candidates"])
+)
 print("days_old:", result["days_old"])
 print("jobs found:", len(result["jobs"]))
 
