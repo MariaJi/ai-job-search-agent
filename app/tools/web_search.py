@@ -7,7 +7,9 @@ from bs4 import BeautifulSoup
 
 def search_original_job(title: str, company: str) -> list[dict]:
     api_key = os.getenv("TAVILY_API_KEY")
-
+    max_results = int(
+    os.getenv("TAVILY_MAX_RESULTS", "5")
+    )
     if not api_key:
         raise ValueError("TAVILY_API_KEY is not configured.")
 
@@ -21,7 +23,7 @@ def search_original_job(title: str, company: str) -> list[dict]:
     response = client.search(
         query=query,
         search_depth="advanced",
-        max_results=10,
+        max_results=max_results,
     )
 
     results = []

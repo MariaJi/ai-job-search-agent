@@ -1050,7 +1050,8 @@ def generate_report(state: JobSearchState):
             f"Recommendation: {job['recommendation']}\n"
             f"Confidence: {job['confidence']}\n"
             f"Location: {job['location']}\n"
-            f"Employment Type: {job.get('employment_type', 'N/A')}\n"
+            
+            f"Employment Type: {job.get('employment_type') or 'N/A'}\n"
             f"Verification Status: {job.get('verification_status', 'verified')}\n"
             
             f"URL: {job.get('verified_url', job.get('url', 'N/A'))}\n"
