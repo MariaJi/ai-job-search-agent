@@ -37,7 +37,7 @@ the graph and providers entirely.
 
 ```mermaid
 flowchart TD
-    UI["React + TypeScript workspace"] -->|"GET /api/v1/demo: no keys"| Demo["FastAPI demo handler"]
+    UI["React + TypeScript workspace"] -->|"GET /api/v1/demo: no keys"| Demo["Isolated public_demo.app:app"]
     Demo --> Fixture["Synthetic fixture"]
     Fixture --> DTO["Public Pydantic response"]
     UI -->|"POST: private local opt-in only"| Gate["Backend live gate + bounded DOCX ingestion"]
@@ -62,6 +62,7 @@ streaming, persistent job store, or automatic retry in the UI.
 | --- | --- |
 | Interface | React, TypeScript, Vite; `frontend/src/` |
 | HTTP contract and validation | FastAPI, Pydantic; `app/api.py`, `app/api_models.py`, `app/api_service.py` |
+| Isolated public service | FastAPI; `public_demo/app.py` (no live imports or upload routes) |
 | Orchestration and matching | LangGraph, LangChain/OpenAI structured outputs; `app/graph.py`, `app/nodes.py` |
 | Ingestion and retrieval | python-docx, requests, Beautiful Soup, Jooble, Tavily; `app/uploads.py`, `app/tools/` |
 | Offline quality checks | pytest, Vitest, Testing Library, ESLint, TypeScript; `tests/`, `frontend/src/test/` |
@@ -260,32 +261,90 @@ as `VITE_API_BASE_URL`, `VITE_ENABLE_LIVE_SEARCH=false` at build time, and allow
 the exact deployed frontend origin in backend CORS. This proposal uses separate
 origins; it does not assume a linked backend or a wildcard.
 
-Before any public deployment, a later implementation must:
+### Isolated demo service and local verification (Stage 4B)
 
-1. Create a separate ASGI entrypoint exposing only `GET /health` and `GET /api/v1/demo`
-   (plus required CORS preflight), with no upload/live route or live OpenAPI schema.
-   Reuse the public response model and synthetic fixture without importing the graph
-   or constructing provider clients. **Do not deploy the current `app.api:app`
-   unchanged:** it still registers the live route even when POST is denied.
-2. Include only the demo handler/model/fixture in the backend release, omit provider
-   credentials and live-workflow modules, and verify that direct calls to the backend's
-   upload path cannot invoke or ingest a resume. Keep `ENABLE_LIVE_SEARCH=false` as
-   defense in depth, not the only boundary.
-3. Produce a narrowly scoped backend package and an explicit ASGI startup command for
-   the chosen supported Python runtime. The current editable `pyproject.toml` install
-   and local `app.api:app` command are not an Azure release pipeline. Do not assume
-   framework auto-detection will find the future demo-only entrypoint.
-4. Verify HTTPS, exact-origin CORS, key-free startup, synthetic-only responses, absent
-   live routes, upload rejection, and safe logs before release. Review resource tiers,
-   regional availability, hosting costs, and budget alerts before provisioning.
-5. Add a separately approved deployment workflow with appropriately scoped Azure
-   identity. The validation workflow added here deliberately has no deploy permissions.
+`public_demo.app:app` imports only FastAPI, the standard library, and the existing
+public Pydantic models. It reads one fixed, packaged synthetic fixture. It does not
+import upload handlers, the graph, provider SDKs, dotenv, or private local files.
+`ENABLE_LIVE_SEARCH` has no effect on this service: there is no live implementation
+to enable. **Never deploy `app.api:app` or the entire repository as the public backend.**
+
+Public business routes are `GET /health` and `GET /api/v1/demo`. The key-free
+`GET /openapi.json` describes only those routes; interactive `/docs` and `/redoc`
+are disabled. Unsupported POSTs return 404/405 without reading their body. CORS
+allows GET only, has no allowed origins by default, never enables credentials, and
+rejects wildcard or malformed origins. Fixture failures return a generic 503 envelope;
+health remains a process check rather than fixture readiness.
+
+To verify locally, stop any API already using port 8000 and run from the repository:
+
+```powershell
+$env:CORS_ORIGINS="http://localhost:5173"
+.venv\Scripts\python.exe -m uvicorn public_demo.app:app --host 127.0.0.1 --port 8000 --no-access-log
+# In another terminal (no resume or provider keys):
+curl.exe http://127.0.0.1:8000/health
+curl.exe http://127.0.0.1:8000/api/v1/demo
+curl.exe -X POST http://127.0.0.1:8000/api/v1/job-search
+# The empty POST must return 404.
+.venv\Scripts\python.exe -m pytest tests/test_public_demo.py -q
+```
+
+Use the existing frontend with `VITE_API_BASE_URL=http://127.0.0.1:8000` and
+`VITE_ENABLE_LIVE_SEARCH=false`. For a future production build, set the API base to
+the approved demo backend HTTPS origin and keep live mode false before `npm run build`.
+No frontend source change or provider key is needed; a mocked test covers custom
+HTTPS origins. The public backend cannot execute live requests even with a tampered UI.
+
+### Minimal release artifacts (build locally; do not deploy yet)
+
+```powershell
+.venv\Scripts\python.exe scripts/build_demo_release.py
+```
+
+This creates ignored `dist/public-demo.zip` using an explicit six-file allowlist:
+`public_demo/__init__.py`, `public_demo/app.py`, `app/api_models.py`,
+`app/fixtures/demo.json`, root `requirements.txt`, and root `startup.sh`.
+It rejects redirected source paths and refuses to overwrite an existing archive;
+use `--output dist/public-demo-next.zip` for another build. No globs, private data,
+root project dependencies, frontend assets, or live-workflow modules are packaged.
+Tests also extract and exercise the archive in a fresh process with forbidden-import,
+private-file, and network guards.
+
+`deploy/demo/requirements.txt` pins only FastAPI, Pydantic, and base Uvicorn as direct
+dependencies (no `standard` extra, multipart, dotenv, or provider SDKs). Transitive
+dependencies are not fully locked. A clean environment can install this requirements
+file without installing the root project. `deploy/demo/startup.sh` becomes `startup.sh`
+in the archive; its explicit production command is:
+
+```sh
+python -m uvicorn public_demo.app:app --host 0.0.0.0 --port 8000 --workers 2 --no-access-log
+```
+
+For a future approved Linux App Service deployment, select a supported Python runtime
+(local validation uses 3.11), use the extracted release root as the application root,
+and set the Startup Command to `sh startup.sh`. The builder normalizes that script to
+LF for Linux. Enable ZIP build automation with the app setting
+`SCM_DO_BUILD_DURING_DEPLOYMENT=true` so Azure installs the root requirements file;
+the ZIP intentionally contains no local virtual environment. See
+[Azure ZIP deployment/build guidance](https://learn.microsoft.com/en-us/azure/app-service/deploy-zip).
+This is configuration guidance, not a deployment script or permission to provision.
+
+Set only explicit HTTPS frontend origins in `CORS_ORIGINS`, use HTTPS-only hosting,
+and supply **no provider credentials or dotenv files**. Uvicorn access logging is
+disabled; separately review platform/request logging, retention, and tracing. The
+service does not parse uploads, but the host still receives network traffic and can
+incur hosting/bandwidth costs. No authentication or traffic-abuse controls are added.
+
+Before public release, verify the artifact on the selected Linux/Azure runtime,
+HTTPS, exact-origin CORS, key-free responses, absent live routes, and platform logs.
+Review region/tier costs and budget alerts, then obtain deployment approval and use
+a separately authorized release identity/workflow. CI still has no deploy permissions.
 
 ### Alternatives considered
 
 | Option | Trade-off |
 | --- | --- |
-| Static Web Apps + demo-only App Service (recommended) | Preserves the Python API boundary with managed hosting; requires a demo-only release and a hosting budget |
+| Static Web Apps + demo-only App Service (recommended) | Preserves the Python API boundary with managed hosting; the isolated release is ready for platform validation and budget approval |
 | Static Web Apps only, serving synthetic JSON | Fewer moving parts and no backend/provider path; requires a future static-demo adapter because the UI currently calls `/api/v1/demo` |
 | Static Web Apps linked to App Service | Same-origin API integration, but introduces plan/integration constraints; unnecessary for the first sample release |
 | Container Apps | Useful if containerization becomes a requirement; adds packaging work not needed for this stage |
@@ -296,6 +355,6 @@ reason not to put the existing several-minute live workflow behind a public demo
 API. See [Azure API options and constraints](https://learn.microsoft.com/en-us/azure/static-web-apps/apis-overview).
 The separate-origin recommendation above does not use that integrated proxy.
 
-No Azure resources, deployment manifests, Docker configuration, or cloud credentials
-are created in Stage 4A. Public deployment remains blocked until the demo-only release
-boundary and the pre-deployment checks above are implemented and approved.
+No Azure resources, Docker configuration, or cloud credentials have been created.
+Stage 4B adds local release artifacts, not a deployed service. Platform verification,
+hosting budget approval, and explicit deployment authorization remain outstanding.
