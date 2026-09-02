@@ -75,6 +75,16 @@ def public_url(value: object) -> str | None:
     return value
 
 
+def public_recommendation(value: object, *, verified: bool) -> str:
+    """Public action wording is evidence-gated, not arbitrary model output."""
+    if verified:
+        if value in ("Apply", "Strong Apply"):
+            return "Apply"
+        if value in ("Maybe", "Skip"):
+            return value
+    return "Review original posting"
+
+
 def build_response(state: dict) -> JobSearchResponse:
     jobs = []
     for job in state["final_ranked_jobs"]:
@@ -93,7 +103,7 @@ def build_response(state: dict) -> JobSearchResponse:
             verified_match_score=job["match_score"] if is_verified else None,
             confidence=job["confidence"], strengths=job.get("strengths", []),
             missing_skills=job.get("missing_skills", []),
-            recommendation=job["recommendation"],
+            recommendation=public_recommendation(job.get("recommendation"), verified=is_verified),
             source_urls=SourceURLs(
                 original=public_url(job.get("source_url") or job.get("url")),
                 verified=public_url(job.get("verified_url")) if is_verified else None,

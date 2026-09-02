@@ -70,6 +70,13 @@ streaming, persistent job store, or automatic retry in the UI.
 
 ### Reading match scores
 
+Recommendations are evidence-gated: only explicitly verified results with verified
+analysis and an internal `Apply`/`Strong Apply` recommendation display **Apply**.
+All preliminary, missing/unknown, failed, not-found, not-attempted, and `not_needed`
+statuses display **Review original posting**, regardless of model wording. Verified
+`Maybe`/`Skip` recommendations remain unchanged; unsupported wording also falls back
+to review. This is decision support, never automatic application submission.
+
 - **Preliminary Match Score:** based on the initial job information. It is useful for
   triage but must not be presented as verified.
 - **Verified Match Score:** numeric only when `verification_status=verified` and the

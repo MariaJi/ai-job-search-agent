@@ -12,7 +12,10 @@ const explanations: Record<string, [string, string]> = {
 
 export default function JobCard({ job, rank, demo }: { job: Job; rank: number; demo: boolean }) {
   const verified = job.verification_status === 'verified' && job.analysis_type === 'verified'
-  const status = job.verification_status || 'unverified'
+  const status = typeof job.verification_status === 'string' ? job.verification_status : 'unverified'
+  const recommendation = verified && ['Apply', 'Strong Apply'].includes(job.recommendation)
+    ? 'Apply' : verified && ['Maybe', 'Skip'].includes(job.recommendation)
+      ? job.recommendation : 'Review original posting'
   const [badge, explanation] = verified ? explanations.verified
     : status !== 'verified' && Object.hasOwn(explanations, status) ? explanations[status]
       : ['Unverified', 'No completed verification is recorded. Treat this result as preliminary.']
@@ -39,7 +42,7 @@ export default function JobCard({ job, rank, demo }: { job: Job; rank: number; d
       <section><h4>Strengths</h4>{job.strengths.length ? <ul>{job.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul> : <p>None identified.</p>}</section>
       <section><h4>Missing skills</h4>{job.missing_skills.length ? <ul>{job.missing_skills.map((s, i) => <li key={i}>{s}</li>)}</ul> : <p>No missing skills identified; this is not a guarantee of fit.</p>}</section>
     </div>
-    <footer className="job-footer"><p><span className="eyebrow">Recommendation</span>{job.recommendation || 'Review the posting before deciding.'}</p>
+    <footer className="job-footer"><p><span className="eyebrow">Recommendation</span>{recommendation}</p>
       <div className="source-links">{links.length ? links.map((link, i) => <a key={link} href={link} target="_blank" rel="noopener noreferrer">{demo ? 'Example source' : i === 0 ? 'View source' : 'Additional source'} <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>) : <span>No source available</span>}</div>
     </footer>
   </article>
