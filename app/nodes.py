@@ -1169,7 +1169,7 @@ def send_verified_jobs_for_analysis(state: JobSearchState):
         if job.get("verification_status") == "verified"
     ]
 
-def final_rank_jobs(state: JobSearchState):
+def final_rank_jobs_Old(state: JobSearchState):
     verified_analyses = state["verified_analyses"]
 
     final_jobs = sorted(
@@ -1181,6 +1181,68 @@ def final_rank_jobs(state: JobSearchState):
     return {
         "final_ranked_jobs": final_jobs
     }
+
+def final_rank_jobs(state: JobSearchState):
+    ranked_jobs = state["ranked_jobs"]
+    verified_analyses = state["verified_analyses"]
+    verified_jobs = state["verified_jobs"]
+
+    def job_key(job: dict) -> str:
+        return (
+            job.get("source_url")
+            or job.get("url")
+            or f"{job.get('company', '')}:{job.get('title', '')}"
+        )
+
+    # Verified analysis wins when available.
+    verified_by_key = {
+        job_key(job): job
+        for job in verified_analyses
+    }
+
+    # Preserve verification outcome even when verification did not succeed.
+    verification_status_by_key = {
+        job_key(job): job.get(
+            "verification_status",
+            "not_verified"
+        )
+        for job in verified_jobs
+    }
+
+    final_jobs = []
+
+    for preliminary_job in ranked_jobs:
+        key = job_key(preliminary_job)
+
+        if key in verified_by_key:
+            final_job = {
+                **verified_by_key[key],
+                "analysis_type": "verified",
+            }
+
+        else:
+            final_job = {
+                **preliminary_job,
+                "verification_status":
+                    verification_status_by_key.get(
+                        key,
+                        "not_attempted"
+                    ),
+                "analysis_type": "preliminary",
+            }
+
+        final_jobs.append(final_job)
+
+    final_jobs = sorted(
+        final_jobs,
+        key=lambda job: job["match_score"],
+        reverse=True
+    )
+
+    return {
+        "final_ranked_jobs": final_jobs
+    }
+
 
 def collect_verified_analyses(state: JobSearchState):
     return {}
