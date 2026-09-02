@@ -276,7 +276,8 @@ Package installation and optional `npm audit` use package registries/advisory se
 “offline” describes the application tests, not dependency downloads.
 
 CI does **not** deploy, publish artifacts, provision Azure resources, or run the CLI.
-Its first hosted result will only be available after a separately authorized push.
+Offline validation has successfully run on GitHub Actions; check the workflow for
+the latest commit's result before merging.
 The frontend lockfile is reproducible with `npm ci`; backend dependencies currently
 use version ranges, not a fully pinned transitive lock.
 

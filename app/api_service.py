@@ -7,7 +7,7 @@ from app.api_models import (
     CandidateSummary, JobSearchResponse, RankedJobResponse,
     RunSummary, SearchCriteriaResponse, SourceURLs,
 )
-from app.constants import AnalysisType, VerificationStatus
+from app.constants import AnalysisType, VerificationStatus, is_verified_analysis, public_recommendation
 from app.state import build_initial_state
 from app.live_config import max_search_jobs, openai_max_retries, tavily_max_results
 
@@ -75,24 +75,12 @@ def public_url(value: object) -> str | None:
     return value
 
 
-def public_recommendation(value: object, *, verified: bool) -> str:
-    """Public action wording is evidence-gated, not arbitrary model output."""
-    if verified:
-        if value in ("Apply", "Strong Apply"):
-            return "Apply"
-        if value in ("Maybe", "Skip"):
-            return value
-    return "Review original posting"
-
-
 def build_response(state: dict) -> JobSearchResponse:
     jobs = []
     for job in state["final_ranked_jobs"]:
         status = VerificationStatus.normalize(job.get("verification_status"))
-        is_verified = (
-            status == VerificationStatus.VERIFIED
-            and job.get("analysis_type", AnalysisType.VERIFIED) == AnalysisType.VERIFIED
-        )
+        analysis_type = job.get("analysis_type", AnalysisType.VERIFIED)
+        is_verified = is_verified_analysis(status, analysis_type)
         jobs.append(RankedJobResponse(
             title=job["title"], company=job["company"], location=job["location"],
             employment_type=job.get("employment_type"),
@@ -103,7 +91,7 @@ def build_response(state: dict) -> JobSearchResponse:
             verified_match_score=job["match_score"] if is_verified else None,
             confidence=job["confidence"], strengths=job.get("strengths", []),
             missing_skills=job.get("missing_skills", []),
-            recommendation=public_recommendation(job.get("recommendation"), verified=is_verified),
+            recommendation=public_recommendation(job.get("recommendation"), status=status, analysis_type=analysis_type),
             source_urls=SourceURLs(
                 original=public_url(job.get("source_url") or job.get("url")),
                 verified=public_url(job.get("verified_url")) if is_verified else None,

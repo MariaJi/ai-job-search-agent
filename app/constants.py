@@ -24,3 +24,18 @@ class VerificationStatus:
 class AnalysisType:
     PRELIMINARY = "preliminary"
     VERIFIED = "verified"
+
+
+def is_verified_analysis(status: object, analysis_type: object = AnalysisType.VERIFIED) -> bool:
+    return VerificationStatus.normalize(status) == VerificationStatus.VERIFIED and analysis_type == AnalysisType.VERIFIED
+
+
+def public_recommendation(value: object, *, status: object,
+                          analysis_type: object = AnalysisType.VERIFIED) -> str:
+    """Shared API/CLI wording; internal model recommendations remain untouched."""
+    if is_verified_analysis(status, analysis_type):
+        if value in ("Apply", "Strong Apply"):
+            return "Apply"
+        if value in ("Maybe", "Skip"):
+            return value
+    return "Review original posting"

@@ -2,6 +2,7 @@ from typing import TypedDict, Annotated
 import operator
 
 class Job(TypedDict):
+    job_id: str
     title: str
     company: str
     location: str

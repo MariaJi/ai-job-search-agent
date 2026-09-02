@@ -1,4 +1,6 @@
 import os
+from collections import Counter
+from uuid import uuid4
 from functools import lru_cache
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
@@ -15,7 +17,7 @@ from langgraph.types import Send
 import html
 import re
 from urllib.parse import urlparse
-from app.constants import AnalysisType, VerificationStatus
+from app.constants import AnalysisType, VerificationStatus, public_recommendation
 from app.live_config import max_search_jobs, openai_max_retries, tavily_max_results
 def clean_html_text(text: str) -> str:
     text = html.unescape(text)
@@ -188,6 +190,7 @@ def search_jobs(state: JobSearchState):
                 pass
 
         job = {
+            "job_id": uuid4().hex,
             "title": raw_job.get("title", ""),
             "company": raw_job.get("company", ""),
             "location": raw_job.get("location", ""),
@@ -757,7 +760,8 @@ def analyze_job(state: JobSearchState):
 
                 "recommendation": recommendation,
 
-                **analysis.model_dump()
+                **analysis.model_dump(),
+                "job_id": current_job.get("job_id"),
             }
         ]
     }
@@ -1093,7 +1097,7 @@ def generate_report(state: JobSearchState):
         lines.append(
             f"{index}. {job['title']} at {job['company']}\n"
             f"{score_lines}"
-            f"Recommendation: {job['recommendation']}\n"
+            f"Recommendation: {public_recommendation(job.get('recommendation'), status=verification_status, analysis_type=analysis_type)}\n"
             f"Confidence: {job['confidence']}\n"
             f"Location: {job['location']}\n"
             
@@ -1245,17 +1249,22 @@ def final_rank_jobs(state: JobSearchState):
     verified_analyses = state["verified_analyses"]
     verified_jobs = state["verified_jobs"]
 
-    def job_key(job: dict) -> str:
-        return (
-            job.get("source_url")
-            or job.get("url")
-            or f"{job.get('company', '')}:{job.get('title', '')}"
-        )
+    def job_key(job: dict) -> str | None:
+        value = job.get("job_id")
+        return value if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) else None
+
+    # Ambiguous or legacy identities cannot transfer verification evidence.
+    ranked_counts = Counter(job_key(job) for job in ranked_jobs)
+    verified_counts = Counter(job_key(job) for job in verified_analyses)
+    status_counts = Counter(job_key(job) for job in verified_jobs)
 
     # Verified analysis wins when available.
     verified_by_key = {
         job_key(job): job
         for job in verified_analyses
+        if job_key(job) is not None
+        and ranked_counts[job_key(job)] == verified_counts[job_key(job)] == 1
+        and job.get("verification_status") == VerificationStatus.VERIFIED
     }
 
     # Preserve verification outcome even when verification did not succeed.
@@ -1265,6 +1274,8 @@ def final_rank_jobs(state: JobSearchState):
             VerificationStatus.FAILED
         )
         for job in verified_jobs
+        if job_key(job) is not None
+        and ranked_counts[job_key(job)] == status_counts[job_key(job)] == 1
     }
 
     final_jobs = []
