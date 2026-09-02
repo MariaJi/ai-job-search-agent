@@ -4,12 +4,11 @@ from tavily import TavilyClient
 from urllib.parse import urlparse
 import json
 from bs4 import BeautifulSoup
+from app.live_config import tavily_max_results
 
 def search_original_job(title: str, company: str) -> list[dict]:
     api_key = os.getenv("TAVILY_API_KEY")
-    max_results = int(
-    os.getenv("TAVILY_MAX_RESULTS", "5")
-    )
+    max_results = tavily_max_results()
     if not api_key:
         raise ValueError("TAVILY_API_KEY is not configured.")
 
@@ -28,7 +27,7 @@ def search_original_job(title: str, company: str) -> list[dict]:
 
     results = []
 
-    for item in response.get("results", []):
+    for item in response.get("results", [])[:max_results]:
         results.append({
             "title": item.get("title", ""),
             "url": item.get("url", ""),
@@ -44,6 +43,7 @@ def search_job_on_source(
     source_url: str
 ) -> list[dict]:
 
+    max_results = tavily_max_results()
     api_key = os.getenv("TAVILY_API_KEY")
 
     if not api_key:
@@ -58,14 +58,14 @@ def search_job_on_source(
     response = client.search(
         query=query,
         search_depth="advanced",
-        max_results=10,
+        max_results=max_results,
     )
 
     results = []
 
     source_prefix = source_url.rstrip("/") + "/"
 
-    for item in response.get("results", []):
+    for item in response.get("results", [])[:max_results]:
         result_url = item.get("url", "")
 
         # Keep only jobs under this company's job-board path.
@@ -80,41 +80,20 @@ def search_job_on_source(
 
     return results
 
-def extract_job_description_Old(url: str) -> str:
-    api_key = os.getenv("TAVILY_API_KEY")
-
-    if not api_key:
-        raise ValueError("TAVILY_API_KEY is not configured.")
-
-    client = TavilyClient(api_key=api_key)
-
-    response = client.extract(
-        urls=[url]
-    )
-
-    results = response.get("results", [])
-
-    if not results:
-        return ""
-
-    return results[0].get("raw_content", "")
-
-
-
 def extract_job_description(url: str) -> dict:
     api_key = os.getenv("TAVILY_API_KEY")
 
-    if not api_key:
-        raise ValueError("TAVILY_API_KEY is not configured.")
-
-    client = TavilyClient(api_key=api_key)
-
     # 1. Try Tavily extraction first
-    response = client.extract(
-        urls=[url]
-    )
-
-    results = response.get("results", [])
+    tavily_error = None
+    try:
+        if not api_key:
+            raise ValueError("TAVILY_API_KEY is not configured.")
+        client = TavilyClient(api_key=api_key)
+        response = client.extract(urls=[url])
+        results = response.get("results", [])
+    except Exception as exc:
+        tavily_error = str(exc)
+        results = []
 
     if results:
         content = results[0].get("raw_content", "")
@@ -163,6 +142,7 @@ def extract_job_description(url: str) -> dict:
             "content": "",
             "source": "direct_http",
             "error": str(exc),
+            "tavily_error": tavily_error,
         }
 
     return {
@@ -170,6 +150,7 @@ def extract_job_description(url: str) -> dict:
         "content": "",
         "source": "direct_http",
         "error": "No usable job description found",
+        "tavily_error": tavily_error,
     }
 
 

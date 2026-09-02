@@ -1,0 +1,4 @@
+# Direct runtime dependencies only; no providers, multipart, dotenv, or graph.
+fastapi==0.141.1
+pydantic==2.13.4
+uvicorn==0.52.4
