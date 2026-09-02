@@ -1,27 +1,6 @@
 
 from dotenv import load_dotenv
-
-
-def build_initial_state(search_request: str, resume_text: str) -> dict:
-    return {
-        "search_request": search_request,
-        "role": "",
-        "location": "",
-        "employment_type": "",
-        "days_old": 7,
-        "jobs": [],
-        "current_job": None,
-        "resume_text": resume_text,
-        "candidate_profile": {},
-        "analyses": [],
-        "ranked_jobs": [],
-        "verification_candidates": [],
-        "verified_jobs": [],
-        "verified_analyses": [],
-        "final_ranked_jobs": [],
-        "selected_jobs": [],
-        "final_report": "",
-    }
+from app.state import build_initial_state
 
 
 def main() -> None:

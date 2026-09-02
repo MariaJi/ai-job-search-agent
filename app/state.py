@@ -37,3 +37,25 @@ class JobSearchState(TypedDict):
     selected_jobs: list[dict]
 
     final_report: str
+
+
+def build_initial_state(search_request: str, resume_text: str) -> JobSearchState:
+    return {
+        "search_request": search_request,
+        "role": "",
+        "location": "",
+        "employment_type": "",
+        "days_old": 7,
+        "jobs": [],
+        "current_job": None,
+        "resume_text": resume_text,
+        "candidate_profile": {},
+        "analyses": [],
+        "ranked_jobs": [],
+        "verification_candidates": [],
+        "verified_jobs": [],
+        "verified_analyses": [],
+        "final_ranked_jobs": [],
+        "selected_jobs": [],
+        "final_report": "",
+    }

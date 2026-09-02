@@ -27,6 +27,7 @@ import main
 import scripts.manual.jooble
 import scripts.manual.resume
 import scripts.manual.job_sources
+import app.api
 assert app.nodes.get_model.cache_info().currsize == 0
 assert app.nodes.get_structured_model.cache_info().currsize == 0
 print('PASS: credential-free imports; no provider construction, network, or resume/dotenv reads')
