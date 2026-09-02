@@ -134,7 +134,7 @@ import socket
 import threading
 
 blocked = ("app.api", "app.api_service", "app.uploads", "app.graph", "app.nodes", "app.tools",
-           "app.state", "app.config", "main", "openai", "langchain", "langchain_openai",
+           "app.state", "app.config", "app.live_config", "main", "openai", "langchain", "langchain_openai",
            "langchain_core", "langgraph", "langsmith", "tavily", "requests", "dotenv", "docx")
 def forbidden_module(name):
     return any(name == prefix or name.startswith(prefix + ".") for prefix in blocked)

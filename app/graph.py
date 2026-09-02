@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 from app.state import JobSearchState
 from langgraph.types import Send
+from app.live_config import max_search_jobs
 
 
 from app.nodes import (
@@ -36,7 +37,7 @@ def fan_out_jobs(state: JobSearchState):
                 "analyses": []
             }
         )
-        for job in state["jobs"]
+        for job in state["jobs"][:max_search_jobs()]
     ]
 
 builder = StateGraph(JobSearchState)

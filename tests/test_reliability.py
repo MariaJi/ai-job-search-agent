@@ -179,7 +179,7 @@ def test_model_factories_are_lazy_cached_and_preserve_configuration(monkeypatch)
         for schema in schemas:
             first = nodes.get_structured_model(schema)
             assert nodes.get_structured_model(schema) is first
-        constructor.assert_called_once_with(model="gpt-4o-mini", temperature=0)
+        constructor.assert_called_once_with(model="gpt-4o-mini", temperature=0, max_retries=2)
         assert provider.with_structured_output.call_count == len(schemas)
         assert [call.args[0] for call in provider.with_structured_output.call_args_list] == list(schemas)
     finally:

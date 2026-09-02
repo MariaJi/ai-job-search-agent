@@ -9,6 +9,7 @@ from app.api_models import (
 )
 from app.constants import AnalysisType, VerificationStatus
 from app.state import build_initial_state
+from app.live_config import max_search_jobs, openai_max_retries, tavily_max_results
 
 
 class ProviderConfigurationError(Exception):
@@ -22,11 +23,13 @@ class ProviderServiceError(Exception):
 def run_workflow(search_request: str, resume_text: str) -> dict:
     """Keep configuration checks and provider imports off the health path."""
     try:
+        max_search_jobs()
+        openai_max_retries()
         verification_limit = int(os.getenv("MAX_VERIFICATION_JOBS", "2"))
-        tavily_results = int(os.getenv("TAVILY_MAX_RESULTS", "5"))
+        tavily_max_results()
     except ValueError:
         raise ProviderConfigurationError from None
-    if verification_limit < 0 or not 1 <= tavily_results <= 20:
+    if verification_limit < 0:
         raise ProviderConfigurationError
     required = ["OPENAI_API_KEY", "JOOBLE_API_KEY"]
     if verification_limit > 0:

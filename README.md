@@ -133,6 +133,8 @@ Neither GET route needs credentials or initializes external providers.
 | `CORS_ORIGINS` | empty | Explicit allowed origins, e.g. `http://localhost:5173`; no wildcard or credentialed CORS |
 | `MAX_VERIFICATION_JOBS` | `2` | Server-level verification limit; non-negative integer |
 | `TAVILY_MAX_RESULTS` | `5` | Server-level search limit, 1–20 |
+| `MAX_SEARCH_JOBS` | `10` | Jooble request and local preliminary-analysis cap, 1–10 |
+| `OPENAI_MAX_RETRIES` | `2` | Retries per model call, 0–2; zero disables retries |
 
 `frontend/.env.example` contains public defaults only. Optional frontend overrides
 belong in ignored `frontend/.env.local`; restart Vite after changing them.
@@ -173,7 +175,53 @@ CI command. Optional diagnostics are described in `scripts/manual/README.md`.
 
 Only one file and one search field are accepted. Use the DOCX MIME type or
 `application/octet-stream`. The API intentionally exposes no per-request result or
-verification-limit overrides; the graph currently requests up to 10 jobs.
+verification-limit overrides; the graph requests `MAX_SEARCH_JOBS` jobs (default 10).
+
+### Controlled private test limits (Stage 4C)
+
+The root `.env.example` documents this opt-in test configuration without credentials:
+
+```dotenv
+MAX_SEARCH_JOBS=3
+MAX_VERIFICATION_JOBS=1
+TAVILY_MAX_RESULTS=1
+OPENAI_MAX_RETRIES=0
+```
+
+These settings do not enable live access. Keep both live switches disabled until a
+test is explicitly authorized. Set limits in the backend process environment or an
+ignored local configuration file; never place provider keys in frontend variables.
+Restart the backend after changing settings, particularly retries: models are lazily
+created and cached. Do not mutate process configuration during a run.
+
+When absent, `MAX_SEARCH_JOBS` defaults to 10 and `OPENAI_MAX_RETRIES` to 2, preserving
+prior behavior. Present values must be decimal integers in the ranges above (outer
+whitespace is accepted). Empty, malformed, and out-of-range values fail closed:
+the private API returns sanitized configuration error HTTP 503 before invoking the
+graph; CLI graph runs reject them before the first model call. Values are not echoed.
+
+Jooble receives `ResultOnPage=MAX_SEARCH_JOBS`. The returned list is sliced locally
+**before date filtering**; there is no refill or pagination if older jobs are removed.
+LangGraph also caps its parallel preliminary-analysis dispatch. Thus a provider
+returning too many jobs cannot cause extra preliminary analyses in a normal run.
+`MAX_VERIFICATION_JOBS` still limits eligible candidates (zero skips verification),
+and `TAVILY_MAX_RESULTS` controls results requested per advanced search, not the
+number of searches. Both Tavily search helpers truncate oversized responses locally
+before processing any result; verification also caps comparison inputs and extraction
+attempts defensively. Tavily values use the same fail-closed integer validation,
+with default 5 and range 1–20. Verification settings retain their defaults/ranges.
+
+With the controlled settings, the strict maximum is **12 logical provider calls**
+per normal workflow run with unchanged process settings:
+9 OpenAI calls (criteria, profile, 3 preliminary analyses, 1 source comparison,
+1 description validation, 1 metadata extraction, 1 verified analysis), 1 Jooble
+request, and 2 Tavily calls (search and extraction). OpenAI retries are disabled.
+At most one additional direct job-page HTTP fallback call can occur, excluding
+redirects. Both Jooble job and Tavily source limits are enforced locally even if
+providers return oversized lists. Logical call counts do not bound redirect hops,
+token usage, or dollar cost; repeat submissions start separate runs.
+Prompts, model (`gpt-4o-mini`), temperature, and scoring are unchanged. Public demo
+services do not import these private limit settings or gain any live capability.
 
 Both search responses contain `criteria`, `candidate_profile` (summary and experience,
 not raw resume text), `ranked_jobs`, and `run_summary`. Jobs include separate scores,

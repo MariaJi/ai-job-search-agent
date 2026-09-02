@@ -16,6 +16,7 @@ import html
 import re
 from urllib.parse import urlparse
 from app.constants import AnalysisType, VerificationStatus
+from app.live_config import max_search_jobs, openai_max_retries, tavily_max_results
 def clean_html_text(text: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"<[^>]+>", "", text)
@@ -72,7 +73,7 @@ class VerifiedJobMetadata(BaseModel):
 @lru_cache(maxsize=1)
 def get_model():
     """Construct the provider only on first use, after configuration is loaded."""
-    return ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    return ChatOpenAI(model="gpt-4o-mini", temperature=0, max_retries=openai_max_retries())
 
 
 @lru_cache(maxsize=None)
@@ -103,6 +104,10 @@ Additional strengths:
 """
 
 def understand_search_request(state: JobSearchState):
+    # Reject invalid limits before even the first model call (including CLI runs).
+    max_search_jobs()
+    openai_max_retries()
+    tavily_max_results()
     search_request = state["search_request"]
 
     criteria = get_structured_model(SearchCriteria).invoke(
@@ -144,6 +149,7 @@ def understand_search_request(state: JobSearchState):
     }
 
 def search_jobs(state: JobSearchState):
+    limit = max_search_jobs()
     role = state["role"]
     location = state["location"]
     days_old = state["days_old"]
@@ -151,10 +157,11 @@ def search_jobs(state: JobSearchState):
     response = search_jooble_jobs(
         keywords=role,
         location=location,
-        results_per_page=10
+        results_per_page=limit
     )
 
-    raw_jobs = response["jobs"]
+    # Enforce locally even if Jooble ignores ResultOnPage. Truncate before filtering.
+    raw_jobs = response["jobs"][:limit]
 
     cutoff_date = datetime.now().astimezone() - timedelta(days=days_old)
 
@@ -815,11 +822,12 @@ def verify_job(state: JobSearchState):
         }
 
     try:
+        source_limit = tavily_max_results()
         # Step 1: broad web search
         search_results = search_original_job(
             title=current_job["title"],
             company=current_job["company"],
-        )
+        )[:source_limit]
 
         
         if not search_results:
@@ -854,7 +862,7 @@ def verify_job(state: JobSearchState):
         description_source = None
 
         
-        for source in ranked_sources:
+        for source in ranked_sources[:source_limit]:
             extraction = extract_job_description(
             source["url"]
             )
