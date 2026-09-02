@@ -24,6 +24,9 @@ from app.nodes import (
 
 
 def fan_out_jobs(state: JobSearchState):
+    if not state["jobs"]:
+        return "rank_jobs"
+
     return [
         Send(
             "analyze_job",
@@ -94,7 +97,7 @@ builder.add_edge(
 builder.add_conditional_edges(
     "search_jobs",        # FROM this node
     fan_out_jobs,         # function decides where/how to go
-    ["analyze_job"]       # possible destination node(s)
+    ["analyze_job", "rank_jobs"]
 )
 
 builder.add_edge("analyze_job", "rank_jobs")
@@ -109,7 +112,7 @@ builder.add_edge(
 builder.add_conditional_edges(
     "select_verification_candidates",
     send_verification_jobs,
-    ["verify_job"],
+    ["verify_job", "collect_verified_jobs"],
 )
 builder.add_edge(
     "verify_job",
@@ -119,7 +122,7 @@ builder.add_edge(
 builder.add_conditional_edges(
     "collect_verified_jobs",
     send_verified_jobs_for_analysis,
-    ["analyze_verified_job"],
+    ["analyze_verified_job", "collect_verified_analyses"],
 )
 builder.add_edge(
     "analyze_verified_job",

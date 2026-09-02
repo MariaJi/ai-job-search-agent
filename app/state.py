@@ -1,4 +1,3 @@
-from typing import TypedDict
 from typing import TypedDict, Annotated
 import operator
 
@@ -11,6 +10,7 @@ class Job(TypedDict):
     description_complete: bool
     source: str
     url: str
+    source_url: str
     updated_date: str
 
 class JobSearchState(TypedDict):

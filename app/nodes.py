@@ -1,5 +1,5 @@
-from unittest import result
 import os
+from functools import lru_cache
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from app.tools.job_search import search_jooble_jobs
@@ -15,6 +15,7 @@ from langgraph.types import Send
 import html
 import re
 from urllib.parse import urlparse
+from app.constants import AnalysisType, VerificationStatus
 def clean_html_text(text: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"<[^>]+>", "", text)
@@ -68,15 +69,16 @@ class VerifiedJobMetadata(BaseModel):
     location: str
     employment_type: str | None = None
 
-model = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0
-)
+@lru_cache(maxsize=1)
+def get_model():
+    """Construct the provider only on first use, after configuration is loaded."""
+    return ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-structured_model = model.with_structured_output(SearchCriteria)
-job_analysis_model = model.with_structured_output(JobAnalysis)
-candidate_profile_model = model.with_structured_output(CandidateProfile)
-job_source_match_model = model.with_structured_output(JobSourceMatch)
+
+@lru_cache(maxsize=None)
+def get_structured_model(schema: type[BaseModel]):
+    """Reuse each structured-output binding without changing provider defaults."""
+    return get_model().with_structured_output(schema)
 
 CANDIDATE_PROFILE = """
 Senior Software Engineer with 10+ years of enterprise software development experience.
@@ -103,7 +105,7 @@ Additional strengths:
 def understand_search_request(state: JobSearchState):
     search_request = state["search_request"]
 
-    criteria = structured_model.invoke(
+    criteria = get_structured_model(SearchCriteria).invoke(
     f"""
     Extract job search criteria from the user's request.
 
@@ -154,7 +156,7 @@ def search_jobs(state: JobSearchState):
 
     raw_jobs = response["jobs"]
 
-    cutoff_date = datetime.now() - timedelta(days=days_old)
+    cutoff_date = datetime.now().astimezone() - timedelta(days=days_old)
 
     jobs = []
 
@@ -162,11 +164,21 @@ def search_jobs(state: JobSearchState):
     for raw_job in raw_jobs:
         updated_text = raw_job.get("updated", "")
 
-        if updated_text:
-            updated_date = datetime.fromisoformat(updated_text)
+        if isinstance(updated_text, str) and updated_text:
+            try:
+                normalized_date = updated_text.replace("Z", "+00:00")
+                updated_date = datetime.fromisoformat(normalized_date)
 
-            if updated_date < cutoff_date:
-                continue
+                if updated_date.tzinfo is None:
+                    updated_date = updated_date.replace(
+                        tzinfo=cutoff_date.tzinfo
+                    )
+
+                if updated_date < cutoff_date:
+                    continue
+            except (TypeError, ValueError):
+                # Retain jobs with bad provider dates; preserve the raw value.
+                pass
 
         job = {
             "title": raw_job.get("title", ""),
@@ -191,7 +203,7 @@ def search_jobs(state: JobSearchState):
 def extract_candidate_profile(state: JobSearchState):
     resume_text = state["resume_text"]
 
-    profile = candidate_profile_model.invoke(
+    profile = get_structured_model(CandidateProfile).invoke(
         f"""
         Extract a structured candidate profile from this resume.
 
@@ -219,7 +231,7 @@ def evaluate_job_source_match(
     search_result: dict
 ) -> JobSourceMatch:
 
-    return job_source_match_model.invoke(
+    return get_structured_model(JobSourceMatch).invoke(
         f"""
         Determine whether this web search result is likely the same job
         as the original job posting.
@@ -396,7 +408,7 @@ def validate_extracted_job(
     extracted_description: str
 ) -> ExtractedJobValidation:
 
-    validator = model.with_structured_output(
+    validator = get_structured_model(
         ExtractedJobValidation
     )
 
@@ -541,7 +553,7 @@ def score_job(
     candidate_profile: dict
 ) -> JobAnalysis:
 
-        return job_analysis_model.invoke(
+        return get_structured_model(JobAnalysis).invoke(
         f"""
         Evaluate how well this candidate matches THIS specific job.
 
@@ -696,9 +708,9 @@ def analyze_job(state: JobSearchState):
     preliminary_match_score = match_score
 
     verification_status = (
-        "not_needed"
+        VerificationStatus.NOT_NEEDED
         if current_job["description_complete"]
-        else "pending"
+        else VerificationStatus.PENDING
     )
 
     verification_priority = get_verification_priority(
@@ -749,7 +761,7 @@ def extract_verified_job_metadata(
     extracted_description: str
 ) -> VerifiedJobMetadata:
 
-    extractor = model.with_structured_output(
+    extractor = get_structured_model(
         VerifiedJobMetadata
     )
 
@@ -797,7 +809,7 @@ def verify_job(state: JobSearchState):
             "verified_jobs": [
                 {
                     **current_job,
-                    "verification_status": "not_needed",
+                    "verification_status": VerificationStatus.NOT_NEEDED,
                 }
             ]
         }
@@ -816,7 +828,7 @@ def verify_job(state: JobSearchState):
                 "verified_jobs": [
                     {
                         **current_job,
-                        "verification_status": "not_found",
+                        "verification_status": VerificationStatus.NOT_FOUND,
                     }
                 ]
             }
@@ -833,7 +845,7 @@ def verify_job(state: JobSearchState):
                 "verified_jobs": [
                     {
                         **current_job,
-                        "verification_status": "not_found",
+                        "verification_status": VerificationStatus.NOT_FOUND,
                     }
                 ]
             }
@@ -870,7 +882,7 @@ def verify_job(state: JobSearchState):
                 "verified_jobs": [
                     {
                         **current_job,
-                        "verification_status": "failed",
+                        "verification_status": VerificationStatus.FAILED,
                     }
                 ]
             }
@@ -905,7 +917,7 @@ def verify_job(state: JobSearchState):
             "verified_url": description_source["url"],
             "description_url": description_source["url"],
 
-            "verification_status": "verified",
+            "verification_status": VerificationStatus.VERIFIED,
             "needs_verification": False,
         }
         return {
@@ -925,9 +937,9 @@ def verify_job(state: JobSearchState):
             or "rate limit" in error_message.lower()
             or "quota" in error_message.lower()
         ):
-            verification_status = "service_error"
+            verification_status = VerificationStatus.SERVICE_ERROR
         else:
-            verification_status = "failed"
+            verification_status = VerificationStatus.FAILED
 
         return {
             "verified_jobs": [
@@ -1008,7 +1020,7 @@ def generate_report(state: JobSearchState):
     service_errors = [
         job
         for job in verified_jobs
-        if job.get("verification_status") == "service_error"
+        if job.get("verification_status") == VerificationStatus.SERVICE_ERROR
     ]
     service_warning = ""
 
@@ -1032,9 +1044,14 @@ def generate_report(state: JobSearchState):
             )
         }
    
+    if not state["jobs"]:
+        return {
+            "final_report": "No jobs were found for the requested criteria."
+        }
+
     if not selected_jobs:
         return {
-            "final_report": "No strong verified job matches were found."
+            "final_report": "No job matches met the application threshold."
         }
 
     lines = []
@@ -1043,16 +1060,39 @@ def generate_report(state: JobSearchState):
         strengths = job.get("strengths", [])
         missing_skills = job.get("missing_skills", [])
 
+        verification_status = VerificationStatus.normalize(
+            job.get("verification_status")
+        )
+        analysis_type = job.get(
+            "analysis_type",
+            AnalysisType.VERIFIED
+            if verification_status == VerificationStatus.VERIFIED
+            else AnalysisType.PRELIMINARY,
+        )
+        if (
+            analysis_type == AnalysisType.VERIFIED
+            and verification_status == VerificationStatus.VERIFIED
+        ):
+            score_lines = (
+                f"Verified Match Score: {job['match_score']}\n"
+                f"Preliminary Match Score: "
+                f"{job.get('preliminary_match_score', 'N/A')}\n"
+            )
+        else:
+            score_lines = (
+                f"Preliminary Match Score: {job['match_score']}\n"
+                "Verified Match Score: Not available\n"
+            )
+
         lines.append(
             f"{index}. {job['title']} at {job['company']}\n"
-            f"Verified Match Score: {job['match_score']}\n"
-            f"Preliminary Score: {job.get('preliminary_match_score', 'N/A')}\n"
+            f"{score_lines}"
             f"Recommendation: {job['recommendation']}\n"
             f"Confidence: {job['confidence']}\n"
             f"Location: {job['location']}\n"
             
             f"Employment Type: {job.get('employment_type') or 'N/A'}\n"
-            f"Verification Status: {job.get('verification_status', 'verified')}\n"
+            f"Verification Status: {verification_status}\n"
             
             f"URL: {job.get('verified_url', job.get('url', 'N/A'))}\n"
             f"Strengths: {', '.join(strengths) if strengths else 'None listed'}\n"
@@ -1088,12 +1128,15 @@ def select_verification_candidates(state: JobSearchState):
     }
 
 def send_verification_jobs(state: JobSearchState):
+    if not state["verification_candidates"]:
+        return "collect_verified_jobs"
+
     return [
         Send(
             "verify_job",
             {
-                **state,
                 "current_job": job,
+                "verified_jobs": [],
             }
         )
         for job in state["verification_candidates"]
@@ -1110,7 +1153,7 @@ def analyze_verified_job(state: JobSearchState):
             "verified_analyses": []
         }
 
-    if current_job.get("verification_status") != "verified":
+    if current_job.get("verification_status") != VerificationStatus.VERIFIED:
         return {
             "verified_analyses": []
         }
@@ -1148,7 +1191,7 @@ def analyze_verified_job(state: JobSearchState):
 
                 "match_score": match_score,
 
-                "verification_status": "verified",
+                "verification_status": VerificationStatus.VERIFIED,
                 "needs_verification": False,
                 "recommendation": recommendation,
             }
@@ -1157,16 +1200,25 @@ def analyze_verified_job(state: JobSearchState):
 
 
 def send_verified_jobs_for_analysis(state: JobSearchState):
+    verified_jobs = [
+        job
+        for job in state["verified_jobs"]
+        if job.get("verification_status") == VerificationStatus.VERIFIED
+    ]
+
+    if not verified_jobs:
+        return "collect_verified_analyses"
+
     return [
         Send(
             "analyze_verified_job",
             {
-                **state,
                 "current_job": job,
+                "candidate_profile": state["candidate_profile"],
+                "verified_analyses": [],
             }
         )
-        for job in state["verified_jobs"]
-        if job.get("verification_status") == "verified"
+        for job in verified_jobs
     ]
 
 def final_rank_jobs_Old(state: JobSearchState):
@@ -1204,7 +1256,7 @@ def final_rank_jobs(state: JobSearchState):
     verification_status_by_key = {
         job_key(job): job.get(
             "verification_status",
-            "not_verified"
+            VerificationStatus.FAILED
         )
         for job in verified_jobs
     }
@@ -1217,7 +1269,7 @@ def final_rank_jobs(state: JobSearchState):
         if key in verified_by_key:
             final_job = {
                 **verified_by_key[key],
-                "analysis_type": "verified",
+                "analysis_type": AnalysisType.VERIFIED,
             }
 
         else:
@@ -1226,9 +1278,11 @@ def final_rank_jobs(state: JobSearchState):
                 "verification_status":
                     verification_status_by_key.get(
                         key,
-                        "not_attempted"
+                        VerificationStatus.NOT_NEEDED
+                        if preliminary_job.get("verification_status") == VerificationStatus.NOT_NEEDED
+                        else VerificationStatus.NOT_ATTEMPTED
                     ),
-                "analysis_type": "preliminary",
+                "analysis_type": AnalysisType.PRELIMINARY,
             }
 
         final_jobs.append(final_job)
