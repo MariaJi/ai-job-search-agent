@@ -1,0 +1,82 @@
+name: Offline validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ENABLE_LIVE_SEARCH: "false"
+      VITE_ENABLE_LIVE_SEARCH: "false"
+      VITE_API_BASE_URL: "http://127.0.0.1:8000"
+      CORS_ORIGINS: ""
+      OPENAI_API_KEY: ""
+      JOOBLE_API_KEY: ""
+      TAVILY_API_KEY: ""
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
+      PYTHON_DOTENV_DISABLED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_INPUT: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Reject private inputs in the checkout
+        run: |
+          python - <<'PY'
+          from pathlib import PurePosixPath
+          import subprocess
+
+          paths = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          forbidden = []
+          for name in filter(None, paths):
+              path = PurePosixPath(name)
+              private_env = (path.name == ".env" or path.name.startswith(".env.")) and path.name != ".env.example"
+              private_data = bool(set(path.parts) & {"data", ".venv", "node_modules"}) or path.suffix.lower() == ".docx"
+              if private_env or private_data:
+                  forbidden.append(name)
+          if forbidden:
+              raise SystemExit("Private environment/data files must not be tracked: " + ", ".join(forbidden))
+          print("No private environment files, resumes, or local dependency directories tracked.")
+          PY
+      - name: Install backend and development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Check backend dependency integrity
+        run: python -m pip check
+      - name: Run complete offline backend suite
+        run: python -m pytest -q
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Run offline frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+      - name: Build demo-safe production frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Check frontend dependency integrity
+        working-directory: frontend
+        run: npm ls --all
