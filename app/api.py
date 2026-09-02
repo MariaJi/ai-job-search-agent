@@ -1,6 +1,7 @@
 """HTTP adapter only; matching and verification remain in the existing graph."""
 
 import os
+from pathlib import Path
 from typing import Annotated, Callable
 from urllib.parse import urlsplit
 
@@ -29,14 +30,18 @@ def error_response(status: int, code: str, message: str) -> JSONResponse:
 class BodyLimitMiddleware:
     """Bound multipart bodies, even without Content-Length, before disk spooling."""
 
-    def __init__(self, app):
+    def __init__(self, app, *, live_enabled: bool):
         self.app = app
+        self.live_enabled = live_enabled
 
     async def __call__(self, scope, receive, send):
         # Bound every POST so mounted/root-path and trailing-slash variants
         # cannot bypass the cap before routing or multipart parsing.
         if scope["type"] != "http" or scope["method"] != "POST":
             return await self.app(scope, receive, send)
+        if not self.live_enabled:
+            response = error_response(403, "live_search_disabled", "Live analysis is disabled. Try the sample demo.")
+            return await response(scope, receive, send)
         chunks = []
         size = 0
         while True:
@@ -82,7 +87,10 @@ def configured_origins() -> list[str]:
 
 def create_app() -> FastAPI:
     application = FastAPI(title="AI Job Search Agent", version="0.2.0", debug=False)
-    application.add_middleware(BodyLimitMiddleware)
+    application.add_middleware(
+        BodyLimitMiddleware,
+        live_enabled=os.getenv("ENABLE_LIVE_SEARCH", "false").lower() == "true",
+    )
     application.add_middleware(
         CORSMiddleware, allow_origins=configured_origins(), allow_credentials=False,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
@@ -104,9 +112,15 @@ def create_app() -> FastAPI:
     async def health():
         return HealthResponse()
 
+    @application.get("/api/v1/demo", response_model=JobSearchResponse)
+    def demo():
+        """Illustrative, synthetic data only; never constructs or invokes providers."""
+        fixture = Path(__file__).with_name("fixtures") / "demo.json"
+        return JobSearchResponse.model_validate_json(fixture.read_text(encoding="utf-8"))
+
     @application.post(
         "/api/v1/job-search", response_model=JobSearchResponse,
-        responses={status: {"model": ErrorResponse} for status in (400, 413, 415, 422, 502, 503, 500)},
+        responses={status: {"model": ErrorResponse} for status in (400, 403, 413, 415, 422, 502, 503, 500)},
     )
     async def job_search(
         request: Request,

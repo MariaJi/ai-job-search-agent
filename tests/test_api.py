@@ -57,6 +57,11 @@ def completed_state():
     return state
 
 
+@pytest.fixture(autouse=True)
+def enable_live_search(monkeypatch):
+    monkeypatch.setenv("ENABLE_LIVE_SEARCH", "true")
+
+
 @pytest.fixture
 def application(monkeypatch):
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
@@ -384,7 +389,7 @@ def test_cors_headers_present_on_internal_failure(monkeypatch):
 
 def test_openapi_documents_contract(application):
     schema = application.openapi()
-    assert set(schema["paths"]) == {"/health", "/api/v1/job-search"}
+    assert set(schema["paths"]) == {"/health", "/api/v1/demo", "/api/v1/job-search"}
     assert "multipart/form-data" in schema["paths"]["/api/v1/job-search"]["post"]["requestBody"]["content"]
     assert "JobSearchResponse" in schema["components"]["schemas"]
 
@@ -431,7 +436,7 @@ def test_chunked_body_limit_applies_without_content_length(monkeypatch, path):
     async def forbidden_app(scope, receive, send):
         pytest.fail("Oversized multipart body reached the parser")
 
-    asyncio.run(api.BodyLimitMiddleware(forbidden_app)(
+    asyncio.run(api.BodyLimitMiddleware(forbidden_app, live_enabled=True)(
         {"type": "http", "method": "POST", "path": path, "headers": []},
         receive, send,
     ))

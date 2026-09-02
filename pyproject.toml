@@ -30,3 +30,6 @@ norecursedirs = [".*", "build", "dist", "venv", "scripts/manual"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["fixtures/*.json"]

@@ -1,0 +1,102 @@
+{
+  "criteria": {
+    "role": "Senior Software / Applied AI Engineer",
+    "location": "Remote, United States",
+    "employment_type": "Full-time",
+    "days_old": 7
+  },
+  "candidate_profile": {
+    "summary": "Synthetic candidate: a backend engineer with experience building Python services, distributed systems, and retrieval-based AI applications. This profile is invented, not extracted from a real resume.",
+    "years_experience": 8
+  },
+  "ranked_jobs": [
+    {
+      "title": "Senior Applied AI Engineer",
+      "company": "Sample • Meridian Labs",
+      "location": "Remote, US",
+      "employment_type": "Full-time",
+      "verification_status": "verified",
+      "analysis_type": "verified",
+      "preliminary_match_score": 84,
+      "verified_match_score": 91,
+      "confidence": "high",
+      "strengths": [
+        "Production Python and API design",
+        "Retrieval pipelines and evaluation",
+        "Ownership across the delivery lifecycle"
+      ],
+      "missing_skills": [
+        "Large-scale model serving"
+      ],
+      "recommendation": "Strong fit — review the model-serving requirements before applying.",
+      "source_urls": {
+        "original": "https://example.com/sample-role-1",
+        "verified": "https://example.com/sample-role-1",
+        "description": null
+      }
+    },
+    {
+      "title": "Senior Backend Engineer, AI Platform",
+      "company": "Sample • Juniper Works",
+      "location": "Remote, US",
+      "employment_type": "Full-time",
+      "verification_status": "not_needed",
+      "analysis_type": "preliminary",
+      "preliminary_match_score": 82,
+      "verified_match_score": null,
+      "confidence": "medium",
+      "strengths": [
+        "Distributed service design",
+        "Python and asynchronous processing",
+        "Cross-functional technical leadership"
+      ],
+      "missing_skills": [
+        "Advanced Kubernetes operations"
+      ],
+      "recommendation": "Promising fit — confirm infrastructure ownership expectations.",
+      "source_urls": {
+        "original": "https://example.com/sample-role-2",
+        "verified": null,
+        "description": null
+      }
+    },
+    {
+      "title": "Software Engineer, Intelligent Products",
+      "company": "Sample • Fieldstone Studio",
+      "location": "Remote, US",
+      "employment_type": "Full-time",
+      "verification_status": "not_found",
+      "analysis_type": "preliminary",
+      "preliminary_match_score": 69,
+      "verified_match_score": null,
+      "confidence": "low",
+      "strengths": [
+        "API integration and product delivery",
+        "Applied language-model workflows"
+      ],
+      "missing_skills": [
+        "Deep frontend specialization",
+        "Experimentation platform experience"
+      ],
+      "recommendation": "Explore cautiously — the original posting could not be confirmed in this simulated run.",
+      "source_urls": {
+        "original": "https://example.com/sample-role-3",
+        "verified": null,
+        "description": null
+      }
+    }
+  ],
+  "run_summary": {
+    "status": "partial",
+    "jobs_found": 3,
+    "jobs_analyzed": 3,
+    "verification_attempted": 2,
+    "verified_jobs": 1,
+    "preliminary_jobs": 2,
+    "selected_jobs": 2,
+    "returned_jobs": 3,
+    "warnings": [
+      "Illustrative sample only. Companies, roles, scores, and verification outcomes are synthetic; these are not current openings."
+    ]
+  }
+}

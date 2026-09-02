@@ -220,3 +220,7 @@ __marimo__/
 .env      → contains your secret OpenAI API key
 .venv/    → contains locally installed Python packages
 data/
+node_modules/
+frontend/coverage/
+frontend/.env.local
+frontend/.env.*.local

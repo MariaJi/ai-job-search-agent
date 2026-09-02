@@ -927,10 +927,8 @@ def verify_job(state: JobSearchState):
     except Exception as exc:
         error_message = str(exc)
 
-        print(
-            f"Verification failed for "
-            f"{current_job['title']}: {error_message}"
-        )
+        # Provider exception text can contain request content or credentials.
+        print("Verification unavailable; retaining preliminary results.")
 
         if (
             "usage limit" in error_message.lower()
