@@ -57,7 +57,9 @@ export default function App({ liveEnabled: requestedLive = LIVE_ENABLED }: { liv
     <main id="workspace" className="workspace">
       <aside className="search-panel" aria-labelledby="search-title">
         <p className="eyebrow">Your next move</p><h1 id="search-title">Find the fit.<br /><em>See the evidence.</em></h1>
-        <p className="intro">Turn a resume and a search request into a ranked shortlist—with the uncertainty left visible.</p>
+        <p className="intro">{STATIC_DEMO
+          ? 'Explore a synthetic replay showing how the agent turns résumé evidence and search criteria into a ranked shortlist.'
+          : 'Turn a resume and a search request into a ranked shortlist—with the uncertainty left visible.'}</p>
         <form onSubmit={submit} noValidate>
           <label htmlFor="search">What are you looking for?</label>
           <textarea id="search" rows={5} maxLength={2000} value={search} disabled={STATIC_DEMO || !!busy} onChange={e => setSearch(e.target.value)} aria-describedby="search-help" />
@@ -76,10 +78,11 @@ export default function App({ liveEnabled: requestedLive = LIVE_ENABLED }: { liv
           </div></>}
           <button className="button primary" type="button" disabled={!!busy} onClick={() => void run('demo')}>{busy === 'demo' ? 'Loading Sample Demo…' : 'Try Sample Demo'} <span aria-hidden="true">↗</span></button>
           {!STATIC_DEMO && <button className="button secondary" type="submit" disabled={!liveEnabled || !!busy}>Run Live Analysis <span aria-hidden="true">→</span></button>}
-          {STATIC_DEMO && <p className="privacy-note">Synthetic sample only. No resume was uploaded. This demo runs entirely in your browser without a backend or provider calls.</p>}
+          {STATIC_DEMO && <p className="privacy-note"><strong>Interactive replay of a completed synthetic agent run.</strong> No resume was uploaded. This demo runs entirely in your browser without a backend or provider calls.</p>}
           <div className="privacy-note"><strong>{liveEnabled ? 'Private, local use only' : 'Sample first. No provider costs.'}</strong><p>{liveEnabled ? 'Live analysis sends resume-derived information to external providers and may incur costs. This tool never submits applications.' : 'Live analysis is disabled in the public demo to protect private data and provider costs. No resume or API keys are needed for the sample.'}</p></div>
         </form>
-        <p className="stack-note">LangGraph workflow <span> / </span> FastAPI <span> / </span> React</p>
+        <p className="stack-note">Real implementation: LangGraph <span> / </span> FastAPI <span> / </span> OpenAI <span> / </span> Jooble <span> / </span> Tavily <span> / </span> React. {STATIC_DEMO && 'No providers run in this public replay.'}</p>
+        <p className="stack-note"><a href="https://github.com/MariaJi/ai-job-search-agent" target="_blank" rel="noopener noreferrer">View source code on GitHub <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></p>
       </aside>
       <section className="results-panel" aria-labelledby="results-title" aria-busy={!!busy}>
         <div className="section-heading"><div><p className="eyebrow">Search intelligence</p><h2 id="results-title" ref={resultHeading} tabIndex={-1}>{result ? 'Your ranked shortlist' : 'A shortlist you can inspect'}</h2></div><span className="outline-badge">{result ? mode === 'demo' ? 'Sample run' : 'Live run' : 'Ready to explore'}</span></div>
