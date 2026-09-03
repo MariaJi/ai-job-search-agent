@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react'
 
 // Keep tests independent of a developer's local live-mode configuration.
 vi.stubEnv('VITE_ENABLE_LIVE_SEARCH', 'false')
+vi.stubEnv('VITE_STATIC_DEMO', 'false')
 vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
 
 beforeEach(() => {

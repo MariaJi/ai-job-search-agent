@@ -94,6 +94,30 @@ not real postings.
 
 ## Safe local demo — no resume or provider keys needed
 
+### Public static-only build
+
+Run `npm ci` and `npm run build:static` from `frontend/`, then `npm run preview`
+to inspect the artifact locally. No backend is needed. This build forces
+`VITE_STATIC_DEMO=true` and `VITE_ENABLE_LIVE_SEARCH=false`, ignores dotenv files,
+and leaves source maps disabled. The sample is bundled directly from the canonical
+`app/fixtures/demo.json`; backend tests validate it against `JobSearchResponse`.
+Try Sample Demo uses no fetch or provider calls. Resume selection and live-analysis
+controls are absent, and results are explicitly synthetic with no resume uploaded.
+
+Only `frontend/dist` is intended for the public static deployment. It contains
+compiled browser assets and `staticwebapp.config.json`, not backend source, tests,
+dependencies, environment files, or private inputs. The Azure configuration enables
+SPA fallback but excludes API paths, requires no authentication, and denies network
+connections and form submissions through its Content Security Policy. Vite preview
+does not emulate Azure's response headers; verify these on the hosting platform later.
+
+Normal `npm run dev` / `npm run build` retain API behavior (`VITE_STATIC_DEMO`
+defaults false). Private local live use still requires both existing live switches.
+The static Azure configuration is only for the public static artifact; do not use
+its connection-denying headers to host a private API-enabled frontend.
+
+### API-backed local demo
+
 Requirements: Python 3.11+ and Node.js 22.12+ with npm. CI uses Python 3.11 and Node 22.
 Commands below use PowerShell; on macOS/Linux use `.venv/bin/python` and shell
 `export NAME=value` syntax instead.
@@ -304,7 +328,14 @@ use version ranges, not a fully pinned transitive lock.
 
 ## Azure deployment recommendation — design only
 
-**Recommended:** Azure Static Web Apps for the Vite assets, plus a separate
+**Recommended for a zero-cost public portfolio:** Azure Static Web Apps Free with
+the static-only build above and no backend/API resource. The hosted sample illustrates
+the workflow without executing LangGraph. No deployment has been performed. Deploy
+only the static artifact, with no API location configured. Free-tier quotas and lack
+of an SLA still apply. The existing CI validates code; deployment remains separately
+authorized and requires its own configuration.
+
+**Alternative when a hosted Python API is desired:** Azure Static Web Apps for the Vite assets, plus a separate
 **demo-only** FastAPI application on Linux Azure App Service. This retains a real
 HTTP/schema boundary for the portfolio while keeping the graph and paid providers
 out of the public request path. Static Web Apps hosts React assets; App Service
@@ -400,8 +431,8 @@ a separately authorized release identity/workflow. CI still has no deploy permis
 
 | Option | Trade-off |
 | --- | --- |
-| Static Web Apps + demo-only App Service (recommended) | Preserves the Python API boundary with managed hosting; the isolated release is ready for platform validation and budget approval |
-| Static Web Apps only, serving synthetic JSON | Fewer moving parts and no backend/provider path; requires a future static-demo adapter because the UI currently calls `/api/v1/demo` |
+| Static Web Apps + demo-only App Service | Optional hosted Python API boundary; requires platform validation and hosting budget approval |
+| Static Web Apps only, bundled synthetic JSON (recommended) | `npm run build:static` provides the no-backend artifact; fewest moving parts and no provider path |
 | Static Web Apps linked to App Service | Same-origin API integration, but introduces plan/integration constraints; unnecessary for the first sample release |
 | Container Apps | Useful if containerization becomes a requirement; adds packaging work not needed for this stage |
 
