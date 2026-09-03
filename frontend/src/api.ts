@@ -1,3 +1,5 @@
+import sample from '../../app/fixtures/demo.json'
+
 export interface Job {
   title: string
   company: string
@@ -28,8 +30,9 @@ export interface SearchResult {
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 export const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-export const LIVE_ENABLED = import.meta.env.VITE_ENABLE_LIVE_SEARCH === 'true'
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+export const STATIC_DEMO = import.meta.env.VITE_STATIC_DEMO === 'true'
+export const LIVE_ENABLED = !STATIC_DEMO && import.meta.env.VITE_ENABLE_LIVE_SEARCH === 'true'
+const API_BASE = STATIC_DEMO ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
 export function validateUpload(file: File): string | null {
   if (!file.name.toLowerCase().endsWith('.docx') || !['', DOCX_TYPE, 'application/octet-stream'].includes(file.type)) {
@@ -94,8 +97,20 @@ async function request(path: string, options: RequestInit): Promise<SearchResult
   return body
 }
 
-export const loadDemo = (signal: AbortSignal) => request('/api/v1/demo', { signal })
+export function readStaticDemo(value: unknown): SearchResult {
+  if (!validResult(value)) throw new Error('The sample demo is unavailable. Please try again later.')
+  return structuredClone(value)
+}
+
+export async function loadDemo(signal: AbortSignal): Promise<SearchResult> {
+  if (STATIC_DEMO) {
+    signal.throwIfAborted()
+    return readStaticDemo(sample)
+  }
+  return request('/api/v1/demo', { signal })
+}
 export function runLive(search: string, resume: File, signal: AbortSignal) {
+  if (STATIC_DEMO) throw new Error('Live analysis is unavailable in the static demo.')
   const form = new FormData()
   form.append('search_request', search.trim())
   form.append('resume', resume)

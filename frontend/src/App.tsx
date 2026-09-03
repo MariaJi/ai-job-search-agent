@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { LIVE_ENABLED, DOCX_TYPE, loadDemo, runLive, validateUpload, type SearchResult } from './api'
+import { STATIC_DEMO, LIVE_ENABLED, DOCX_TYPE, loadDemo, runLive, validateUpload, type SearchResult } from './api'
 import JobCard from './JobCard'
 
-export default function App({ liveEnabled = LIVE_ENABLED }: { liveEnabled?: boolean }) {
+export default function App({ liveEnabled: requestedLive = LIVE_ENABLED }: { liveEnabled?: boolean }) {
+  const liveEnabled = !STATIC_DEMO && requestedLive
   const [search, setSearch] = useState('Find remote Senior Software Engineer and Applied AI Engineer roles in the US, posted in the last 7 days.')
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
@@ -59,9 +60,9 @@ export default function App({ liveEnabled = LIVE_ENABLED }: { liveEnabled?: bool
         <p className="intro">Turn a resume and a search request into a ranked shortlist—with the uncertainty left visible.</p>
         <form onSubmit={submit} noValidate>
           <label htmlFor="search">What are you looking for?</label>
-          <textarea id="search" rows={5} maxLength={2000} value={search} disabled={!!busy} onChange={e => setSearch(e.target.value)} aria-describedby="search-help" />
-          <p className="field-help" id="search-help">Include a role, location, and time window. The sample uses its own illustrative criteria.</p>
-          <label htmlFor="resume">Your resume <span className="label-detail">DOCX · up to 5 MiB</span></label>
+          <textarea id="search" rows={5} maxLength={2000} value={search} disabled={STATIC_DEMO || !!busy} onChange={e => setSearch(e.target.value)} aria-describedby="search-help" />
+          <p className="field-help" id="search-help">{STATIC_DEMO ? 'Illustrative search criteria. Choose Try Sample Demo to explore the bundled results.' : 'Include a role, location, and time window. The sample uses its own illustrative criteria.'}</p>
+          {!STATIC_DEMO && <><label htmlFor="resume">Your resume <span className="label-detail">DOCX · up to 5 MiB</span></label>
           <div className={`upload-box ${!liveEnabled ? 'disabled-upload' : ''}`}>
             <input ref={upload} id="resume" type="file" accept={`.docx,${DOCX_TYPE}`} disabled={!liveEnabled || !!busy} aria-describedby="resume-help" onChange={e => {
               const selected = e.target.files?.[0]
@@ -72,9 +73,10 @@ export default function App({ liveEnabled = LIVE_ENABLED }: { liveEnabled?: bool
             }} />
             {file && <div className="selected-file"><span>{file.name}<small>{Math.ceil(file.size / 1024)} KiB · ready to upload</small></span><button type="button" className="text-button" disabled={!!busy} onClick={removeFile}>Remove file</button></div>}
             <p id="resume-help">{liveEnabled ? 'Sent only when you run live analysis. No browser storage; file selection is cleared after the request.' : 'Uploads are disabled in this public-demo configuration.'}</p>
-          </div>
+          </div></>}
           <button className="button primary" type="button" disabled={!!busy} onClick={() => void run('demo')}>{busy === 'demo' ? 'Loading Sample Demo…' : 'Try Sample Demo'} <span aria-hidden="true">↗</span></button>
-          <button className="button secondary" type="submit" disabled={!liveEnabled || !!busy}>Run Live Analysis <span aria-hidden="true">→</span></button>
+          {!STATIC_DEMO && <button className="button secondary" type="submit" disabled={!liveEnabled || !!busy}>Run Live Analysis <span aria-hidden="true">→</span></button>}
+          {STATIC_DEMO && <p className="privacy-note">Synthetic sample only. No resume was uploaded. This demo runs entirely in your browser without a backend or provider calls.</p>}
           <div className="privacy-note"><strong>{liveEnabled ? 'Private, local use only' : 'Sample first. No provider costs.'}</strong><p>{liveEnabled ? 'Live analysis sends resume-derived information to external providers and may incur costs. This tool never submits applications.' : 'Live analysis is disabled in the public demo to protect private data and provider costs. No resume or API keys are needed for the sample.'}</p></div>
         </form>
         <p className="stack-note">LangGraph workflow <span> / </span> FastAPI <span> / </span> React</p>
