@@ -6,9 +6,13 @@ skill gaps, source verification, and uncertainty visible instead of returning
 an unexplained match score.
 
 **Decision support only: this tool never submits applications.** The public-facing
-experience is a synthetic demo, not a feed of current openings or a hiring prediction.
+experience is a synthetic, browser-only static demo hosted on Azure Static Web Apps,
+not a feed of current openings or a hiring prediction. It requires no Python backend,
+OpenAI, Jooble, or Tavily.
 Live provider-backed analysis is available only when explicitly enabled for private
-local use. No Azure deployment exists yet.
+local use.
+
+[Live Demo — synthetic, browser-only](https://red-flower-08246411e.6.azurestaticapps.net)
 
 ## Features and engineering focus
 
@@ -103,8 +107,22 @@ from the posting. Confirm the type on the original posting before applying.
 
 ### Public static-only build
 
-Run `npm ci` and `npm run build:static` from `frontend/`, then `npm run preview`
-to inspect the artifact locally. No backend is needed. This build forces
+From `frontend/`, build and smoke-test the actual static artifact:
+
+```powershell
+npm ci
+npm run build:static
+npm run preview -- --port 4173 --strictPort
+```
+
+Open `http://localhost:4173` with browser developer tools recording network requests.
+The initial page loads static assets. Clear the network log, then choose **Try Sample
+Demo**: it reads bundled synthetic data and should make no application API or provider
+requests. Confirm three sample cards, one Apply recommendation, two Review original
+posting recommendations, and no resume-upload or live-search controls. No backend or
+provider credentials are needed. Vite preview serves the last build in `frontend/dist`.
+
+This build forces
 `VITE_STATIC_DEMO=true` and `VITE_ENABLE_LIVE_SEARCH=false`, ignores dotenv files,
 and leaves source maps disabled. The sample is bundled directly from the canonical
 `app/fixtures/demo.json`; backend tests validate it against `JobSearchResponse`.
@@ -299,7 +317,9 @@ accessibility-focused interactions. Manual scripts are outside pytest collection
 
 The CI workflow runs on pushes, pull requests, and manual dispatch. It installs
 backend dependencies and locked frontend dependencies, then runs the complete suites,
-dependency-integrity checks, lint, and the demo-safe production build. It has read-only
+dependency-integrity checks, lint, and both frontend production builds: normal/API-capable
+(`npm run build`), followed by static (`npm run build:static`). Both write to
+`frontend/dist`, so the static artifact is built last. CI has read-only
 repository permissions, disables credential persistence, supplies no provider secrets,
 disables dotenv loading, and rejects tracked private environment/resume/data files.
 Tests may exercise mocked live branches; no real live service is enabled or called.
@@ -333,11 +353,12 @@ use version ranges, not a fully pinned transitive lock.
 - Public demo mode must carry no provider secrets and expose only synthetic data.
   A disabled button or CORS configuration cannot protect a paid endpoint on its own.
 
-## Azure deployment recommendation — design only
+## Azure static demo and optional backend deployment
 
 **Recommended for a zero-cost public portfolio:** Azure Static Web Apps Free with
 the static-only build above and no backend/API resource. The hosted sample illustrates
-the workflow without executing LangGraph. No deployment has been performed. Deploy
+the workflow without executing LangGraph. The public static demo is already deployed;
+its Live Demo link is provided above. For updates, deploy
 only the static artifact, with no API location configured. Free-tier quotas and lack
 of an SLA still apply. The existing CI validates code; deployment remains separately
 authorized and requires its own configuration.
@@ -449,6 +470,7 @@ reason not to put the existing several-minute live workflow behind a public demo
 API. See [Azure API options and constraints](https://learn.microsoft.com/en-us/azure/static-web-apps/apis-overview).
 The separate-origin recommendation above does not use that integrated proxy.
 
-No Azure resources, Docker configuration, or cloud credentials have been created.
-Stage 4B adds local release artifacts, not a deployed service. Platform verification,
-hosting budget approval, and explicit deployment authorization remain outstanding.
+The public static demo already exists on Azure Static Web Apps. The optional Python
+backend artifacts described above are separate and are not required by that demo.
+This repository's CI does not deploy either application; the hosted demo's revision
+must be checked separately before assuming it matches the latest local code.

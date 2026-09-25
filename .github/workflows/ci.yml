@@ -74,9 +74,12 @@ jobs:
       - name: Lint frontend
         working-directory: frontend
         run: npm run lint
-      - name: Build demo-safe production frontend
+      - name: Build normal API-capable production frontend
         working-directory: frontend
         run: npm run build
+      - name: Build static production demo
+        working-directory: frontend
+        run: npm run build:static
       - name: Check frontend dependency integrity
         working-directory: frontend
         run: npm ls --all
