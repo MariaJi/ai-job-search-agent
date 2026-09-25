@@ -19,7 +19,7 @@
       "analysis_type": "verified",
       "preliminary_match_score": 84,
       "verified_match_score": 91,
-      "confidence": "high",
+      "confidence": "High",
       "strengths": [
         "Production Python and API design",
         "Retrieval pipelines and evaluation",
@@ -28,11 +28,11 @@
       "missing_skills": [
         "Large-scale model serving"
       ],
-      "recommendation": "Strong fit — review the model-serving requirements before applying.",
+      "recommendation": "Apply",
       "source_urls": {
         "original": "https://example.com/sample-role-1",
         "verified": "https://example.com/sample-role-1",
-        "description": null
+        "description": "https://example.com/sample-role-1"
       }
     },
     {
@@ -40,11 +40,11 @@
       "company": "Sample • Juniper Works",
       "location": "Remote, US",
       "employment_type": "Full-time",
-      "verification_status": "not_needed",
+      "verification_status": "not_found",
       "analysis_type": "preliminary",
       "preliminary_match_score": 82,
       "verified_match_score": null,
-      "confidence": "medium",
+      "confidence": "Medium",
       "strengths": [
         "Distributed service design",
         "Python and asynchronous processing",
@@ -53,7 +53,7 @@
       "missing_skills": [
         "Advanced Kubernetes operations"
       ],
-      "recommendation": "Promising fit — confirm infrastructure ownership expectations.",
+      "recommendation": "Review original posting",
       "source_urls": {
         "original": "https://example.com/sample-role-2",
         "verified": null,
@@ -65,11 +65,11 @@
       "company": "Sample • Fieldstone Studio",
       "location": "Remote, US",
       "employment_type": "Full-time",
-      "verification_status": "not_found",
+      "verification_status": "not_attempted",
       "analysis_type": "preliminary",
-      "preliminary_match_score": 69,
+      "preliminary_match_score": 79,
       "verified_match_score": null,
-      "confidence": "low",
+      "confidence": "Low",
       "strengths": [
         "API integration and product delivery",
         "Applied language-model workflows"
@@ -78,7 +78,7 @@
         "Deep frontend specialization",
         "Experimentation platform experience"
       ],
-      "recommendation": "Explore cautiously — the original posting could not be confirmed in this simulated run.",
+      "recommendation": "Review original posting",
       "source_urls": {
         "original": "https://example.com/sample-role-3",
         "verified": null,
@@ -93,10 +93,12 @@
     "verification_attempted": 2,
     "verified_jobs": 1,
     "preliminary_jobs": 2,
-    "selected_jobs": 2,
+    "selected_jobs": 1,
     "returned_jobs": 3,
     "warnings": [
-      "Illustrative sample only. Companies, roles, scores, and verification outcomes are synthetic; these are not current openings."
+      "Illustrative sample only. Companies, roles, scores, and verification outcomes are synthetic; these are not current openings.",
+      "Simulated verification budget: 2 jobs. The two highest preliminary scores were checked; the third job remains unattempted.",
+      "Some jobs could not be verified; preliminary scores were retained."
     ]
   }
 }

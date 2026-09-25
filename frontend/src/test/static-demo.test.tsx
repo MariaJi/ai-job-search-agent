@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import sample from '../../../app/fixtures/demo.json'
 
@@ -39,6 +39,16 @@ it('shows synthetic results without upload or live controls, including a live pr
   await userEvent.click(screen.getByRole('button', { name: /Try Sample Demo/ }))
   expect(await screen.findByRole('heading', { name: 'Your ranked shortlist' })).toBeInTheDocument()
   expect(screen.getAllByRole('article')).toHaveLength(sample.ranked_jobs.length)
+  const cards = screen.getAllByRole('article')
+  expect(within(cards[0]).getByText('Apply')).toBeInTheDocument()
+  expect(within(cards[0]).getByText('Verified Match Score')).toBeInTheDocument()
+  expect(within(cards[1]).getByText('Source not found')).toBeInTheDocument()
+  expect(within(cards[2]).getByText('Not attempted')).toBeInTheDocument()
+  for (const card of cards.slice(1)) {
+    expect(within(card).getByText('Review original posting')).toBeInTheDocument()
+    expect(within(card).queryByText('Apply')).not.toBeInTheDocument()
+    expect(within(card).getByText('No verified score available')).toBeInTheDocument()
+  }
   expect(screen.getAllByText('Synthetic posting — no external source.')).toHaveLength(sample.ranked_jobs.length)
   expect(screen.queryByRole('link', { name: /Example source/ })).not.toBeInTheDocument()
   expect(fetch).not.toHaveBeenCalled()

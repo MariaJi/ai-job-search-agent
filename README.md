@@ -83,8 +83,9 @@ to review. This is decision support, never automatic application submission.
   analysis is verified. Source verification is not a guarantee that an opening is
   current, accurate, or suitable.
 - **Missing, empty, or unknown statuses:** unverified; never upgrade them implicitly.
-- **`not_needed`:** a complete description was available, so source verification was
-  skipped. Its score remains preliminary.
+- **`not_needed` (legacy compatibility):** previously indicated that verification
+  was skipped for a complete description. The current Jooble workflow does not
+  produce this status; all imported jobs begin as preliminary snippets.
 - **Failed/not-found verification:** preserve preliminary evidence and clearly label
   the limitation. Partial runs can still return useful jobs.
 
