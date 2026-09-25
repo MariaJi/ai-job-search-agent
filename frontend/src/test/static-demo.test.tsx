@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import sample from '../../../app/fixtures/demo.json'
 
@@ -26,11 +26,28 @@ it('loads canonical data without any fetch and returns an independent copy', asy
   expect(fetch).not.toHaveBeenCalled()
 })
 
-it('shows synthetic results without upload or live controls, including a live prop override', async () => {
+it('shows disabled private capabilities and synthetic results, including a live prop override', async () => {
+  const api = await import('../api')
+  const live = vi.spyOn(api, 'runLive')
   const { default: App } = await import('../App')
-  const { container } = render(<App liveEnabled />)
-  expect(container.querySelector('input[type="file"]')).toBeNull()
-  expect(screen.queryByRole('button', { name: /Run Live Analysis/ })).not.toBeInTheDocument()
+  render(<App liveEnabled />)
+  const resume = screen.getByLabelText(/Your resume/) as HTMLInputElement
+  const liveButton = screen.getByRole('button', { name: /Run Live Analysis.*Private mode only/ })
+  expect(resume).toBeVisible()
+  expect(resume).toBeDisabled()
+  expect(liveButton).toBeVisible()
+  expect(liveButton).toBeDisabled()
+  expect(screen.getByRole('button', { name: /Try Sample Demo/ })).toBeEnabled()
+  expect(screen.getByText('Private mode only · DOCX')).toBeVisible()
+  expect(screen.getByText('Resume upload is available in private mode.')).toBeVisible()
+  expect(within(liveButton).getByText('Private mode only').tagName).toBe('SMALL')
+  expect(screen.getByText('Resume upload and live provider-backed analysis are available in private mode. This public demo uses a synthetic candidate profile and bundled sample results.')).toBeVisible()
+  await userEvent.upload(resume, new File(['synthetic'], 'resume.docx', { type: api.DOCX_TYPE }))
+  expect(resume.files).toHaveLength(0)
+  await userEvent.click(liveButton)
+  fireEvent.submit(liveButton.closest('form')!)
+  expect(live).not.toHaveBeenCalled()
+  expect(fetch).not.toHaveBeenCalled()
   expect(screen.getByText('Explore a synthetic replay showing how the agent turns résumé evidence and search criteria into a ranked shortlist.')).toBeInTheDocument()
   expect(screen.getByText(/Interactive replay of a completed synthetic agent run/)).toBeInTheDocument()
   expect(screen.getByText(/No providers run in this public replay/)).toBeInTheDocument()
@@ -52,6 +69,8 @@ it('shows synthetic results without upload or live controls, including a live pr
   expect(screen.getAllByText('Synthetic posting — no external source.')).toHaveLength(sample.ranked_jobs.length)
   expect(screen.queryByRole('link', { name: /Example source/ })).not.toBeInTheDocument()
   expect(fetch).not.toHaveBeenCalled()
+  expect(live).not.toHaveBeenCalled()
+  live.mockRestore()
 })
 
 it.each([null, {}, { ...sample, ranked_jobs: 'invalid' }, { ...sample, run_summary: null }])('rejects malformed synthetic data safely', async value => {

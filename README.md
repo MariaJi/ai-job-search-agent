@@ -119,7 +119,8 @@ Open `http://localhost:4173` with browser developer tools recording network requ
 The initial page loads static assets. Clear the network log, then choose **Try Sample
 Demo**: it reads bundled synthetic data and should make no application API or provider
 requests. Confirm three sample cards, one Apply recommendation, two Review original
-posting recommendations, and no resume-upload or live-search controls. No backend or
+posting recommendations, and resume-upload/live-search controls shown as disabled,
+private-mode-only capabilities. No backend or
 provider credentials are needed. Vite preview serves the last build in `frontend/dist`.
 
 This build forces
@@ -127,7 +128,8 @@ This build forces
 and leaves source maps disabled. The sample is bundled directly from the canonical
 `app/fixtures/demo.json`; backend tests validate it against `JobSearchResponse`.
 Try Sample Demo uses no fetch or provider calls. Resume selection and live-analysis
-controls are absent, and results are explicitly synthetic with no resume uploaded.
+controls are shown but disabled and labeled private-mode-only; results are explicitly
+synthetic with no resume uploaded.
 
 Only `frontend/dist` is intended for the public static deployment. It contains
 compiled browser assets and `staticwebapp.config.json`, not backend source, tests,
