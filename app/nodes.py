@@ -535,9 +535,6 @@ def get_verification_priority(
     match_score: int
 ) -> str:
 
-    if job["description_complete"]:
-        return "Not Needed"
-
     if (
         match_score >= 85
         or (
@@ -717,11 +714,7 @@ def analyze_job(state: JobSearchState):
 
     preliminary_match_score = match_score
 
-    verification_status = (
-        VerificationStatus.NOT_NEEDED
-        if current_job["description_complete"]
-        else VerificationStatus.PENDING
-    )
+    verification_status = VerificationStatus.PENDING
 
     verification_priority = get_verification_priority(
         current_job,
@@ -756,7 +749,7 @@ def analyze_job(state: JobSearchState):
 
                 "verification_status": verification_status,
                 "verification_priority": verification_priority,
-                "needs_verification": not current_job["description_complete"],
+                "needs_verification": True,
 
                 "recommendation": recommendation,
 
@@ -812,17 +805,6 @@ def verify_job(state: JobSearchState):
     if current_job is None:
         return {
             "verified_jobs": []
-        }
-
-    # Already complete — no verification needed.
-    if current_job["description_complete"]:
-        return {
-            "verified_jobs": [
-                {
-                    **current_job,
-                    "verification_status": VerificationStatus.NOT_NEEDED,
-                }
-            ]
         }
 
     try:
@@ -1010,6 +992,7 @@ def select_jobs(state: JobSearchState):
         if (
             job["recommendation"] in ["Strong Apply", "Apply"]
             and job["match_score"] >= 75
+            and job.get("verification_status") == VerificationStatus.VERIFIED
         )
     ]
 
@@ -1123,8 +1106,7 @@ def select_verification_candidates(state: JobSearchState):
         job
         for job in state["ranked_jobs"]
         if (
-            job["needs_verification"]
-            and job["verification_priority"] in ["High", "Medium"]
+            job["verification_priority"] in ["High", "Medium"]
         )
     ]
 

@@ -30,9 +30,9 @@ def test_identity_lifecycle_with_colliding_postings(monkeypatch, url):
     state = invoke_offline_graph(monkeypatch, raw)
     ids = [item["job_id"] for item in state["jobs"]]
     assert len(set(ids)) == 3
-    for field in ("analyses", "ranked_jobs", "final_ranked_jobs", "selected_jobs"):
+    for field in ("analyses", "ranked_jobs", "final_ranked_jobs"):
         assert [item["job_id"] for item in state[field]] == ids
-    for field in ("verification_candidates", "verified_jobs", "verified_analyses"):
+    for field in ("verification_candidates", "verified_jobs", "verified_analyses", "selected_jobs"):
         assert [item["job_id"] for item in state[field]] == ids[:1]
     assert [item["location"] for item in state["final_ranked_jobs"]] == ["Seattle", "Boston", "Austin"]
     assert [item["analysis_type"] for item in state["final_ranked_jobs"]] == ["verified", "preliminary", "preliminary"]

@@ -116,16 +116,18 @@ def test_graph_finalizes_when_verification_does_not_succeed(monkeypatch, status)
     assert result["final_ranked_jobs"][0]["verification_status"] == (
         status
     )
-    assert "Preliminary Match Score: 83" in result["final_report"]
-    assert "Verified Match Score: Not available" in result["final_report"]
+    assert result["final_ranked_jobs"][0]["match_score"] == 83
+    assert result["selected_jobs"] == []
+    assert "AI Engineer at Example" not in result["final_report"]
 
 
 def test_zero_verification_budget_keeps_preliminary_matches(monkeypatch):
     monkeypatch.setenv("MAX_VERIFICATION_JOBS", "0")
     result = invoke_offline_graph(monkeypatch, [job()], analysis((35, 20, 15, 8, 5)))
     assert result["verification_candidates"] == []
-    assert result["selected_jobs"][0]["verification_status"] == VerificationStatus.NOT_ATTEMPTED
-    assert "Preliminary Match Score: 83" in result["final_report"]
+    assert result["final_ranked_jobs"][0]["verification_status"] == VerificationStatus.NOT_ATTEMPTED
+    assert result["final_ranked_jobs"][0]["match_score"] == 83
+    assert result["selected_jobs"] == []
 
 
 def test_parallel_reducers_collect_each_job_once_with_mixed_verification(monkeypatch):
