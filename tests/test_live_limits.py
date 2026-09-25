@@ -16,7 +16,7 @@ def test_requested_and_returned_jobs_are_capped(monkeypatch, limit):
     search = Mock(return_value={"jobs": [job() for _ in range(25)]})
     monkeypatch.setattr(nodes, "search_jooble_jobs", search)
     state = nodes.search_jobs({"role": "Engineer", "location": "Remote", "days_old": 7})
-    search.assert_called_once_with(keywords="Engineer", location="Remote", results_per_page=limit)
+    search.assert_called_once_with(keywords="Engineer", location="Remote", results_per_page=10)
     assert len(state["jobs"]) == limit
     assert len(fan_out_jobs({"jobs": [job()] * 25, "candidate_profile": {}})) == limit
 
@@ -80,7 +80,7 @@ def test_actual_jooble_payload(monkeypatch):
     monkeypatch.setattr(job_search.requests, "post", post)
     result = nodes.search_jobs({"role": "Engineer", "location": "Remote", "days_old": 7})
     assert post.call_count == 1
-    assert post.call_args.kwargs["json"]["ResultOnPage"] == 3
+    assert post.call_args.kwargs["json"]["ResultOnPage"] == 10
     assert len(result["jobs"]) == 3
 
 

@@ -191,7 +191,7 @@ Neither GET route needs credentials or initializes external providers.
 | `CORS_ORIGINS` | empty | Explicit allowed origins, e.g. `http://localhost:5173`; no wildcard or credentialed CORS |
 | `MAX_VERIFICATION_JOBS` | `2` | Server-level verification limit; non-negative integer |
 | `TAVILY_MAX_RESULTS` | `5` | Server-level search limit, 1–20 |
-| `MAX_SEARCH_JOBS` | `10` | Jooble request and local preliminary-analysis cap, 1–10 |
+| `MAX_SEARCH_JOBS` | `10` | Post-date-filter preliminary-analysis cap, 1–10; Jooble retrieval uses a fixed pool of 10 |
 | `OPENAI_MAX_RETRIES` | `2` | Retries per model call, 0–2; zero disables retries |
 
 `frontend/.env.example` contains public defaults only. Optional frontend overrides
@@ -233,7 +233,8 @@ CI command. Optional diagnostics are described in `scripts/manual/README.md`.
 
 Only one file and one search field are accepted. Use the DOCX MIME type or
 `application/octet-stream`. The API intentionally exposes no per-request result or
-verification-limit overrides; the graph requests `MAX_SEARCH_JOBS` jobs (default 10).
+verification-limit overrides; retrieval requests 10 candidates and selects at most
+`MAX_SEARCH_JOBS` date-eligible jobs for analysis (default 10).
 
 ### Controlled private test limits (Stage 4C)
 
@@ -258,8 +259,11 @@ whitespace is accepted). Empty, malformed, and out-of-range values fail closed:
 the private API returns sanitized configuration error HTTP 503 before invoking the
 graph; CLI graph runs reject them before the first model call. Values are not echoed.
 
-Jooble receives `ResultOnPage=MAX_SEARCH_JOBS`. The returned list is sliced locally
-**before date filtering**; there is no refill or pagination if older jobs are removed.
+Jooble receives `ResultOnPage=10`. At most the first 10 returned candidates are
+inspected, then the existing date filter is applied. The first `MAX_SEARCH_JOBS`
+eligible jobs are selected in provider order for preliminary analysis. With
+`MAX_SEARCH_JOBS=3`, this means retrieve up to 10, date-filter, then analyze at most 3.
+The retrieval pool is fixed and bounded; there is no pagination or refill beyond it.
 LangGraph also caps its parallel preliminary-analysis dispatch. Thus a provider
 returning too many jobs cannot cause extra preliminary analyses in a normal run.
 `MAX_VERIFICATION_JOBS` still limits eligible candidates (zero skips verification),

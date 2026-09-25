@@ -178,6 +178,70 @@ def test_report_labels_preliminary_and_verified_scores():
     assert "Verified Match Score: 90\nPreliminary Match Score: 82" in report
 
 
+def test_jooble_diagnostics_show_cap_date_decisions_and_no_private_payloads(monkeypatch, capsys):
+    from unittest.mock import Mock
+
+    monkeypatch.setenv("MAX_SEARCH_JOBS", "3")
+    monkeypatch.setenv("JOOBLE_API_KEY", "API_KEY_SENTINEL")
+    recent = datetime.now(timezone.utc).isoformat()
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    jobs = [dict(raw_job(updated), title=title, snippet="DESCRIPTION_SENTINEL")
+            for title, updated in [("Recent", recent), ("Old", old),
+                                   ("Unknown", "bad-date")]]
+    jobs.extend(dict(raw_job(recent), title=f"Extra {index}") for index in range(7))
+    jobs.append(dict(raw_job(recent), title="BEYOND_CAP_SENTINEL"))
+    search = Mock(return_value={"jobs": jobs, "private": "PROVIDER_PAYLOAD_SENTINEL"})
+    monkeypatch.setattr(nodes, "search_jooble_jobs", search)
+    result = nodes.search_jobs(make_state(
+        resume_text="RESUME_SENTINEL", candidate_profile={"summary": "PERSONAL_SENTINEL"},
+    ))
+    output = capsys.readouterr().out
+    assert "role='AI Engineer' location='Remote' days_old=7 MAX_SEARCH_JOBS=3" in output
+    assert "retrieval_limit=10" in output
+    assert "returned=11 considering=10 cutoff=" in output
+    cutoff = next(line.split("cutoff=", 1)[1] for line in output.splitlines() if "cutoff=" in line)
+    assert datetime.fromisoformat(cutoff).tzinfo is not None
+    assert f"title='Recent' updated={recent!r} retained" in output
+    assert f"title='Old' updated={old!r} removed (older than cutoff)" in output
+    assert "title='Unknown' updated='bad-date' retained" in output
+    assert "Jooble retrieval: date_eligible=9 selected_for_analysis=3" in output
+    assert output.count("Jooble date filter:") == 10
+    assert [job["title"] for job in result["jobs"]] == ["Recent", "Unknown", "Extra 0"]
+    search.assert_called_once_with(keywords="AI Engineer", location="Remote", results_per_page=10)
+    for private in ("API_KEY_SENTINEL", "RESUME_SENTINEL", "PERSONAL_SENTINEL",
+                    "DESCRIPTION_SENTINEL", "PROVIDER_PAYLOAD_SENTINEL", "BEYOND_CAP_SENTINEL"):
+        assert private not in output
+
+
+@pytest.mark.parametrize("all_old", [False, True])
+def test_jooble_diagnostics_distinguish_empty_from_filtered_results(monkeypatch, capsys, all_old):
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    monkeypatch.setattr(nodes, "search_jooble_jobs", lambda **kwargs: {"jobs": [raw_job(old)] if all_old else []})
+    assert nodes.search_jobs(make_state())["jobs"] == []
+    output = capsys.readouterr().out
+    assert f"returned={int(all_old)} considering={int(all_old)}" in output
+    assert ("removed (older than cutoff)" in output) is all_old
+    assert "Jooble retrieval: date_eligible=0 selected_for_analysis=0" in output
+
+
+@pytest.mark.parametrize("recent_index,expected", [(3, 1), (9, 1), (10, 0)])
+def test_recent_job_after_old_results_is_selected_only_within_retrieval_pool(monkeypatch, recent_index, expected):
+    from unittest.mock import Mock
+    from test_graph_empty_paths import analysis, invoke_offline_graph
+
+    monkeypatch.setenv("MAX_SEARCH_JOBS", "3")
+    monkeypatch.setenv("MAX_VERIFICATION_JOBS", "0")
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    recent = datetime.now(timezone.utc).isoformat()
+    jobs = [dict(raw_job(old), title=f"Old {index}") for index in range(recent_index)]
+    jobs.append(dict(raw_job(recent), title="Recent"))
+    scorer = Mock(return_value=analysis((35, 20, 15, 8, 5)))
+    monkeypatch.setattr(nodes, "score_job", scorer)
+    result = invoke_offline_graph(monkeypatch, jobs)
+    assert [job["title"] for job in result["jobs"]] == (["Recent"] if expected else [])
+    assert len(result["analyses"]) == scorer.call_count == expected
+
+
 def test_main_import_has_no_side_effects(capsys):
     module = importlib.import_module("main")
     importlib.reload(module)

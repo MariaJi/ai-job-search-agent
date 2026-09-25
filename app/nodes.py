@@ -154,20 +154,26 @@ def understand_search_request(state: JobSearchState):
 
 def search_jobs(state: JobSearchState):
     limit = max_search_jobs()
+    retrieval_limit = 10  # Fixed MVP pool, independent of the analysis budget.
     role = state["role"]
     location = state["location"]
     days_old = state["days_old"]
 
+    # Local console diagnostics: only retrieval fields, never full state/payloads.
+    print(f"Jooble retrieval: role={role!r} location={location!r} "
+          f"days_old={days_old} MAX_SEARCH_JOBS={limit} retrieval_limit={retrieval_limit}")
     response = search_jooble_jobs(
         keywords=role,
         location=location,
-        results_per_page=limit
+        results_per_page=retrieval_limit
     )
 
-    # Enforce locally even if Jooble ignores ResultOnPage. Truncate before filtering.
-    raw_jobs = response["jobs"][:limit]
+    # Bound inspection even if Jooble ignores ResultOnPage; cap analysis after filtering.
+    raw_jobs = response["jobs"][:retrieval_limit]
 
     cutoff_date = datetime.now().astimezone() - timedelta(days=days_old)
+    print(f"Jooble retrieval: returned={len(response['jobs'])} "
+          f"considering={len(raw_jobs)} cutoff={cutoff_date.isoformat()}")
 
     jobs = []
 
@@ -186,6 +192,8 @@ def search_jobs(state: JobSearchState):
                     )
 
                 if updated_date < cutoff_date:
+                    print(f"Jooble date filter: title={raw_job.get('title', '')!r} "
+                          f"updated={updated_text!r} removed (older than cutoff)")
                     continue
             except (TypeError, ValueError):
                 # Retain jobs with bad provider dates; preserve the raw value.
@@ -206,7 +214,12 @@ def search_jobs(state: JobSearchState):
         }
 
         jobs.append(job)
+        print(f"Jooble date filter: title={raw_job.get('title', '')!r} "
+              f"updated={updated_text!r} retained")
 
+    date_eligible_count = len(jobs)
+    jobs = jobs[:limit]
+    print(f"Jooble retrieval: date_eligible={date_eligible_count} selected_for_analysis={len(jobs)}")
     return {
         "jobs": jobs,
         "current_job": jobs[0] if jobs else None
