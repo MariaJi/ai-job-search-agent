@@ -93,6 +93,12 @@ All companies, candidate details, scores, and verification outcomes in
 `app/fixtures/demo.json` are synthetic. Its `example.com` links are placeholders,
 not real postings.
 
+Requested employment type is parsed as a preference only. If unspecified, it
+remains an empty string and is displayed as "Not specified"; it does not default
+to Full-time. This preference does not filter results or affect match scores.
+Verified postings may separately contain a job-level employment type extracted
+from the posting. Confirm the type on the original posting before applying.
+
 ## Safe local demo — no resume or provider keys needed
 
 ### Public static-only build

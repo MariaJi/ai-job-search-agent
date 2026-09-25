@@ -129,8 +129,10 @@ def understand_search_request(state: JobSearchState):
         - If no location preference is specified, return "Any".
 
     - employment_type:
-        - Extract Full-time, Part-time, Contract, Internship, etc.
-        - If not specified, return "Full-time".
+        - Extract the employment type explicitly requested by the user,
+          such as Full-time, Part-time, Contract, or Internship.
+        - If not specified, return an empty string ("").
+        - Do not infer or default to Full-time.
 
     - days_old:
         - If the user says "today", return 1.

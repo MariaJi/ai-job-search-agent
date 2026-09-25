@@ -101,6 +101,14 @@ def test_health_without_credentials_or_provider_initialization(application, monk
     forbidden.assert_not_called()
 
 
+@pytest.mark.parametrize("employment_type", ["", "Contract"])
+def test_requested_employment_type_string_is_preserved(application, runner, employment_type):
+    runner.return_value["employment_type"] = employment_type
+    response = post(application)
+    assert response.status_code == 200
+    assert response.json()["criteria"]["employment_type"] == employment_type
+
+
 def test_search_returns_public_contract_only(application, runner):
     response = post(application)
     assert response.status_code == 200, response.text

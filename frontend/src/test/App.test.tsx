@@ -120,6 +120,28 @@ describe('upload and local live access', () => {
 })
 
 describe('verification semantics', () => {
+  it.each(['', 'Contract'])('labels requested employment type %s as an unenforced preference', async employmentType => {
+    const data = fixture()
+    data.criteria.employment_type = employmentType
+    respond(data)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /try sample demo/i }))
+    await screen.findByRole('heading', { name: 'Your ranked shortlist' })
+    await userEvent.click(screen.getByText('Search criteria & candidate summary'))
+    expect(screen.getByText(`Employment type: ${employmentType || 'Not specified'} (preference only)`)).toBeVisible()
+    expect(screen.queryByText('Employment type: Full-time (preference only)')).not.toBeInTheDocument()
+    expect(screen.getByText('Employment type is not currently used to filter or score jobs. Confirm the type on the original posting.')).toBeVisible()
+    const verifiedCard = screen.getAllByRole('article')[0]
+    expect(within(verifiedCard).getByText(/Remote, US.*Full-time/)).toBeVisible()
+    expect(within(verifiedCard).getByText('Apply')).toBeVisible()
+  })
+
+  it.each([null, ''])('keeps the missing job-level type fallback for %s', employmentType => {
+    const job = { ...fixture().ranked_jobs[0], employment_type: employmentType }
+    render(<JobCard job={job} rank={1} demo={false} />)
+    expect(screen.getByText(/Type not specified/)).toBeVisible()
+  })
+
   it('shows separate preliminary and verified scores only for explicit verified analysis', () => {
     render(<JobCard job={fixture().ranked_jobs[0]} rank={1} demo={false} />)
     expect(screen.getByText('Preliminary Match Score').parentElement).toHaveTextContent('84')

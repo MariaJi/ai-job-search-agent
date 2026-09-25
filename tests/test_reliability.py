@@ -44,6 +44,31 @@ def raw_job(updated):
     }
 
 
+@pytest.mark.parametrize("search_request,employment_type", [
+    ("Find remote AI jobs", ""),
+    ("Find remote Contract AI jobs", "Contract"),
+])
+def test_search_criteria_preserves_explicit_or_unspecified_employment_type(monkeypatch, search_request, employment_type):
+    from unittest.mock import Mock
+
+    # Validate the string contract and node propagation with a mocked model;
+    # prompt assertions check the instruction, not real-model extraction accuracy.
+    criteria = nodes.SearchCriteria(
+        role="AI Engineer", location="Remote", employment_type=employment_type, days_old=7,
+    )
+    model = Mock()
+    model.invoke.return_value = criteria
+    factory = Mock(return_value=model)
+    monkeypatch.setattr(nodes, "get_structured_model", factory)
+    result = nodes.understand_search_request({"search_request": search_request})
+    factory.assert_called_once_with(nodes.SearchCriteria)
+    assert result["employment_type"] == employment_type
+    prompt = model.invoke.call_args.args[0]
+    assert search_request in prompt
+    assert 'If not specified, return an empty string ("").' in prompt
+    assert "Do not infer or default to Full-time." in prompt
+
+
 @pytest.mark.parametrize(
     "updated",
     [
