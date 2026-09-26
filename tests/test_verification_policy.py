@@ -30,7 +30,7 @@ def test_jooble_snippet_verification_and_rescoring(monkeypatch, outcome):
     monkeypatch.setattr(nodes, "rank_job_sources", lambda **kwargs: kwargs["search_results"])
     extract = Mock(return_value={"status": "success", "content": "Verified full description", "source": "test"})
     monkeypatch.setattr(nodes, "extract_job_description", extract)
-    validate = Mock(return_value=SimpleNamespace(is_same_job=outcome == "verified"))
+    validate = Mock(return_value=SimpleNamespace(is_same_job=outcome == "verified", description_sufficient=True))
     monkeypatch.setattr(nodes, "validate_extracted_job", validate)
     monkeypatch.setattr(nodes, "extract_verified_job_metadata", Mock(return_value=SimpleNamespace(location="Remote", employment_type="Full-time")))
 

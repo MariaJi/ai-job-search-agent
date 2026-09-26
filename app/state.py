@@ -20,6 +20,7 @@ class JobSearchState(TypedDict):
     location: str
     employment_type: str
     days_old: int
+    search_constraints: dict
 
     jobs: list[Job]
     current_job: Job | None
@@ -47,6 +48,7 @@ def build_initial_state(search_request: str, resume_text: str) -> JobSearchState
         "location": "",
         "employment_type": "",
         "days_old": 7,
+        "search_constraints": {},
         "jobs": [],
         "current_job": None,
         "resume_text": resume_text,

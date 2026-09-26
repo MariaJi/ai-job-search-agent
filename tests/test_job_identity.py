@@ -25,7 +25,7 @@ def test_identity_lifecycle_with_colliding_postings(monkeypatch, url):
     monkeypatch.setattr(nodes, "search_original_job", Mock(return_value=[{"url": "https://example.com/source"}]))
     monkeypatch.setattr(nodes, "rank_job_sources", lambda **kwargs: kwargs["search_results"])
     monkeypatch.setattr(nodes, "extract_job_description", Mock(return_value={"status": "success", "content": "Synthetic", "source": "test"}))
-    monkeypatch.setattr(nodes, "validate_extracted_job", Mock(return_value=SimpleNamespace(is_same_job=True)))
+    monkeypatch.setattr(nodes, "validate_extracted_job", Mock(return_value=SimpleNamespace(is_same_job=True, description_sufficient=True)))
     monkeypatch.setattr(nodes, "extract_verified_job_metadata", Mock(return_value=SimpleNamespace(location="", employment_type="Full-time")))
     state = invoke_offline_graph(monkeypatch, raw)
     ids = [item["job_id"] for item in state["jobs"]]

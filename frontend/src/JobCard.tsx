@@ -45,7 +45,7 @@ export default function JobCard({ job, rank, demo }: { job: Job; rank: number; d
     <footer className="job-footer"><p><span className="eyebrow">Recommendation</span>{recommendation}</p>
       <div className="source-links">{demo
         ? <span>Synthetic posting — no external source.</span>
-        : links.length ? links.map((link, i) => <a key={link} href={link} target="_blank" rel="noopener noreferrer">{i === 0 ? 'View source' : 'Additional source'} <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>) : <span>No source available</span>}</div>
+        : links.length ? links.map(link => <a key={link} href={link} target="_blank" rel="noopener noreferrer">{verified && link === sourceLink(job.source_urls.verified) ? 'View verified source' : 'Review source'} <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a>) : <span>No source available</span>}</div>
     </footer>
   </article>
 }

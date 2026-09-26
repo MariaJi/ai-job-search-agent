@@ -1,4 +1,5 @@
 import os
+import json
 from collections import Counter
 from uuid import uuid4
 from functools import lru_cache
@@ -11,6 +12,7 @@ from app.tools.web_search import (
     search_original_job,
     search_job_on_source,
     extract_job_description,
+    extract_job_description_http,
 )
 from difflib import SequenceMatcher
 from langgraph.types import Send
@@ -19,6 +21,7 @@ import re
 from urllib.parse import urlparse
 from app.constants import AnalysisType, VerificationStatus, public_recommendation
 from app.live_config import max_search_jobs, openai_max_retries, tavily_max_results
+from app.eligibility import SearchConstraints, VerifiedConstraintsEvidence, assess_eligibility
 def clean_html_text(text: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"<[^>]+>", "", text)
@@ -33,6 +36,7 @@ class SearchCriteria(BaseModel):
     location: str
     employment_type: str
     days_old: int
+    constraints: SearchConstraints = Field(default_factory=SearchConstraints)
 
 class JobAnalysis(BaseModel):
     technical_score: int = Field(ge=0, le=40)
@@ -63,6 +67,7 @@ class JobSourceMatch(BaseModel):
 
 class ExtractedJobValidation(BaseModel):
     is_same_job: bool
+    description_sufficient: bool
     confidence: str
     reason: str
 
@@ -71,6 +76,7 @@ class VerifiedJobMetadata(BaseModel):
     company: str
     location: str
     employment_type: str | None = None
+    eligibility_evidence: VerifiedConstraintsEvidence = Field(default_factory=VerifiedConstraintsEvidence)
 
 @lru_cache(maxsize=1)
 def get_model():
@@ -125,7 +131,9 @@ def understand_search_request(state: JobSearchState):
 
     - location:
         - If the user says "remote", return "Remote".
-        - If the user specifies a city, state, or country, return that location.
+        - Remote takes precedence for retrieval location even when a city, state,
+          or country is also requested; preserve that geography separately in constraints.
+        - Otherwise, if the user specifies a city, state, or country, return that location.
         - If no location preference is specified, return "Any".
 
     - employment_type:
@@ -142,6 +150,23 @@ def understand_search_request(state: JobSearchState):
         - If no time range is specified, return 7.
 
     Do not treat "remote" as a missing location.
+    Separately preserve explicit hard requirements in constraints:
+    - remote_required: true only when remote work is explicitly required, not merely preferred.
+    - geography: preserve the explicitly requested geography even when location is Remote.
+      If geography is omitted, return geography="", geography_scope="unknown",
+      and country_codes=[]. Never default missing geography to US or worldwide.
+      "Find remote Senior Software Engineer jobs." means remote_required=true
+      with no geography constraint; remote does not mean worldwide eligibility.
+      "Find remote Senior Software Engineer jobs in the US." means location="Remote",
+      remote_required=true, geography="US", geography_scope="country", country_codes=["US"].
+      "Find Senior Software Engineer jobs in the US." means location="US",
+      remote_required=false, geography="US", geography_scope="country", country_codes=["US"].
+    - geography_scope: country for country-level constraints, subnational for city/state
+      constraints, unknown when unclear. Country compatibility does not prove city compatibility.
+    - country_codes: ISO two-letter uppercase countries unambiguously required by that
+      geography (US for United States, AU for Australia); empty if unclear.
+    - recency_days: the explicit requested posting-age window; null when omitted,
+      even though days_old defaults to 7. Do not invent hard constraints.
     """
     )
     
@@ -149,7 +174,8 @@ def understand_search_request(state: JobSearchState):
         "role": criteria.role,
         "location": criteria.location,
         "employment_type": criteria.employment_type,
-        "days_old" : criteria.days_old
+        "days_old" : criteria.days_old,
+        "search_constraints": getattr(criteria, "constraints", SearchConstraints()).model_dump(),
     }
 
 def search_jobs(state: JobSearchState):
@@ -360,12 +386,16 @@ def rank_job_sources(
         "Low": 1,
     }
 
-    for result in search_results:
+    for source_number, result in enumerate(search_results, start=1):
+        print(f"Verification identity: source={source_number} started")
         match = evaluate_job_source_match(
             job=job,
             search_result=result
         )
 
+        confidence = match.confidence if match.confidence in ("High", "Medium", "Low") else "Unknown"
+        print(f"Verification identity: source={source_number} is_same_job={match.is_same_job} "
+              f"confidence={confidence} decision={'accepted' if match.is_same_job else 'rejected'}")
         if not match.is_same_job:
             continue
 
@@ -418,6 +448,7 @@ def rank_job_sources(
             "title": item["result"]["title"],
             "url": item["result"]["url"],
             "content": item["result"]["content"],
+            "raw_content": item["result"].get("raw_content") or "",
             "match_confidence": item["confidence"],
             "source_quality": item["source_quality"],
             "selection_score": item["selection_score"],
@@ -486,6 +517,13 @@ def validate_extracted_job(
         - If important evidence conflicts, return is_same_job=False.
         - If there is not enough evidence to confidently establish that
           this is the same posting, return is_same_job=False.
+
+        Independently assess description_sufficient:
+        - True only when the extracted text contains substantive job
+          responsibilities and requirements suitable for candidate fit scoring.
+        - A title, teaser, search snippet, navigation text, access-denied page,
+          or generic company description is insufficient, even if identity matches.
+        - Length alone does not establish sufficiency. If uncertain, return False.
 
         confidence must be one of:
         "High", "Medium", or "Low".
@@ -777,7 +815,8 @@ def analyze_job(state: JobSearchState):
 
 def extract_verified_job_metadata(
     source: dict,
-    extracted_description: str
+    extracted_description: str,
+    structured_metadata: dict | None = None,
 ) -> VerifiedJobMetadata:
 
     extractor = get_structured_model(
@@ -797,6 +836,9 @@ def extract_verified_job_metadata(
         FULL JOB DESCRIPTION:
         {extracted_description}
 
+        STRUCTURED FIELDS FROM THE SAME SELECTED JOBPOSTING (if available):
+        {json.dumps(structured_metadata or {})}
+
         Extract:
         - title
         - company
@@ -809,9 +851,36 @@ def extract_verified_job_metadata(
         - Preserve remote/hybrid information when stated.
         - employment_type should be values such as
           Full-time, Part-time, Contract, Temporary, or Internship.
+        - eligibility_evidence is independent of candidate fit and source identity.
+        - work_arrangement: remote, hybrid, in_office, or unknown. Only explicit
+          requirements qualify; optional offices or mixed/ambiguous arrangements are unknown.
+        - country_codes: ISO two-letter uppercase permitted applicant countries or
+          required workplace countries. Never use company headquarters or hiringOrganization
+          addresses. Set countries_exhaustive=true only when this is clearly the complete
+          allowed set. A remote employer's office location does not restrict applicants.
+        - posting_date: original posting date as YYYY-MM-DD, or null if absent/ambiguous.
+          Never use an updated/modified date as the original posting date.
+        - posting_age_days: only an explicit exact "posted N days ago" statement,
+          otherwise null. Do not guess or resolve vague relative dates.
+        - Missing or conflicting evidence must remain unknown/empty/null.
         """
     )
 
+
+
+def job_description_evidence(source: dict):
+    """Yield evidence lazily so rejected text can fall back without extra fetches."""
+    raw_content = (source.get("raw_content") or "").strip()
+    print(f"Verification extraction: stage=search_raw_content usable={bool(raw_content)} characters={len(raw_content)}")
+    if raw_content:
+        yield {"status": "success", "content": raw_content, "source": "tavily_search_raw_content"}
+
+    extraction = extract_job_description(source["url"])
+    yield extraction
+    # The existing helper already tries HTTP when Tavily extraction is empty/failed.
+    # Retry via HTTP only when nonempty Tavily text was rejected by validation.
+    if extraction["status"] == "success" and extraction["source"] == "tavily_extract":
+        yield extract_job_description_http(source["url"])
 
 
 def verify_job(state: JobSearchState):
@@ -822,9 +891,12 @@ def verify_job(state: JobSearchState):
             "verified_jobs": []
         }
 
+    stage = "configuration"
     try:
         source_limit = tavily_max_results()
+        print(f"Verification start: title={current_job['title']!r} company={current_job['company']!r} source_limit={source_limit}")
         # Step 1: broad web search
+        stage = "search"
         search_results = search_original_job(
             title=current_job["title"],
             company=current_job["company"],
@@ -832,6 +904,7 @@ def verify_job(state: JobSearchState):
 
         
         if not search_results:
+            print("Verification outcome: status=not_found reason=no_search_results")
             
             return {
                 "verified_jobs": [
@@ -843,13 +916,19 @@ def verify_job(state: JobSearchState):
             }
 
         # Step 2: rank sources
+        stage = "source_identity_ranking"
         ranked_sources = rank_job_sources(
             job=current_job,
             search_results=search_results,
         )
         
         
+        source_numbers = [next((index for index, result in enumerate(search_results, 1)
+                                if result.get('url') == source.get('url')), 0)
+                          for source in ranked_sources[:source_limit]]
+        print(f"Verification ranking: accepted={len(ranked_sources)} attempt_order={source_numbers}")
         if not ranked_sources:
+            print("Verification outcome: status=not_found reason=no_matching_sources")
             return {
                 "verified_jobs": [
                     {
@@ -861,32 +940,44 @@ def verify_job(state: JobSearchState):
 
         successful_extraction = None
         description_source = None
+        failure_reason = "extraction_failed"
 
         
-        for source in ranked_sources[:source_limit]:
-            extraction = extract_job_description(
-            source["url"]
-            )
+        for source_number, source in zip(source_numbers, ranked_sources[:source_limit]):
+            stage = "extraction"
+            print(f"Verification extraction: source={source_number} started")
+            for extraction in job_description_evidence(source):
+                print(f"Verification extraction: source={source_number} usable={extraction['status'] == 'success'} "
+                      f"characters={len(extraction.get('content', ''))}")
+                if extraction["status"] != "success":
+                    continue
 
-            if extraction["status"] != "success":
-                continue
+                stage = "extracted_validation"
+                validation = validate_extracted_job(
+                    job=current_job,
+                    source=source,
+                    extracted_description=extraction["content"],
+                )
 
-            validation = validate_extracted_job(
-                job=current_job,
-                source=source,
-                extracted_description=extraction["content"],
-            )
+                confidence = getattr(validation, "confidence", None)
+                confidence = confidence if confidence in ("High", "Medium", "Low") else "Unknown"
+                accepted = validation.is_same_job and validation.description_sufficient
+                print(f"Verification validation: source={source_number} is_same_job={validation.is_same_job} "
+                      f"confidence={confidence} sufficient={validation.description_sufficient} "
+                      f"decision={'accepted' if accepted else 'rejected'}")
+                if not accepted:
+                    failure_reason = "validation_rejected" if not validation.is_same_job else "description_insufficient"
+                    stage = "extraction"
+                    continue
 
-            if not validation.is_same_job:
-                
-                continue
-
-          
-            successful_extraction = extraction
-            description_source = source
-            break
+                successful_extraction = extraction
+                description_source = source
+                break
+            if successful_extraction is not None:
+                break
 
         if successful_extraction is None:
+            print(f"Verification outcome: status=failed reason={failure_reason}")
             return {
                 "verified_jobs": [
                     {
@@ -896,12 +987,19 @@ def verify_job(state: JobSearchState):
                 ]
             }
 
+        stage = "metadata"
+        print("Verification metadata: started")
         verified_metadata = extract_verified_job_metadata(
             source=description_source,
             extracted_description=successful_extraction["content"],
+            structured_metadata=successful_extraction.get("structured_metadata"),
         )
 
 
+        print("Verification metadata: completed " + " ".join(
+            f"{field}_populated={bool(getattr(verified_metadata, field, None))}"
+            for field in ("title", "company", "location", "employment_type")))
+        stage = "finalize"
         verified_job = {
             **current_job,
 
@@ -918,6 +1016,13 @@ def verify_job(state: JobSearchState):
             "description": successful_extraction["content"],
             "description_source": successful_extraction["source"],
             "description_complete": True,
+            "verified_evidence": {
+                "facts": getattr(verified_metadata, "eligibility_evidence", VerifiedConstraintsEvidence()).model_dump(),
+                "source_url": description_source["url"],
+                "description_source": successful_extraction["source"],
+                "observed_at": datetime.now().astimezone().isoformat(),
+                "structured_metadata": successful_extraction.get("structured_metadata", {}),
+            },
 
             "source_url": current_job.get(
                 "source_url",
@@ -929,6 +1034,7 @@ def verify_job(state: JobSearchState):
             "verification_status": VerificationStatus.VERIFIED,
             "needs_verification": False,
         }
+        print("Verification outcome: status=verified reason=success")
         return {
             "verified_jobs": [verified_job]
         }
@@ -938,6 +1044,7 @@ def verify_job(state: JobSearchState):
 
         # Provider exception text can contain request content or credentials.
         print("Verification unavailable; retaining preliminary results.")
+        print(f"Verification exception: stage={stage} class={type(exc).__name__}")
 
         if (
             "usage limit" in error_message.lower()
@@ -948,6 +1055,7 @@ def verify_job(state: JobSearchState):
         else:
             verification_status = VerificationStatus.FAILED
 
+        print(f"Verification outcome: status={verification_status} reason={'metadata_failed' if stage == 'metadata' else 'exception'}")
         return {
             "verified_jobs": [
                 {
@@ -1008,6 +1116,7 @@ def select_jobs(state: JobSearchState):
             job["recommendation"] in ["Strong Apply", "Apply"]
             and job["match_score"] >= 75
             and job.get("verification_status") == VerificationStatus.VERIFIED
+            and job.get("eligibility", {}).get("status") != "contradicted"
         )
     ]
 
@@ -1130,6 +1239,10 @@ def select_verification_candidates(state: JobSearchState):
     else:
         candidates = candidates[:max_verification_jobs]
 
+    print(f"Verification selection: limit={max_verification_jobs} selected={len(candidates)}")
+    for job in candidates:
+        print(f"Verification selected: title={job.get('title', '')!r} company={job.get('company', '')!r} "
+              f"preliminary_score={job.get('preliminary_match_score', job.get('match_score'))} priority={job['verification_priority']}")
     return {
         "verification_candidates": candidates
     }
@@ -1285,6 +1398,11 @@ def final_rank_jobs(state: JobSearchState):
                 **verified_by_key[key],
                 "analysis_type": AnalysisType.VERIFIED,
             }
+            final_job["eligibility"] = assess_eligibility(
+                state.get("search_constraints", {}), final_job.get("verified_evidence", {})
+            )
+            if final_job["eligibility"]["status"] == "contradicted":
+                final_job["recommendation"] = "Skip"
 
         else:
             final_job = {

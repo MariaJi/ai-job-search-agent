@@ -145,9 +145,10 @@ def test_one_source_bounds_comparison_extraction_validation_and_fallback(monkeyp
     http.text = "Synthetic HTML"
     get = Mock(return_value=http)
     monkeypatch.setattr(web_search.requests, "get", get)
-    monkeypatch.setattr(web_search, "parse_job_description", Mock(return_value="Synthetic description"))
+    monkeypatch.setattr(web_search, "parse_job_posting", Mock(return_value={
+        "content": "Synthetic description", "structured_metadata": {}}))
     compare = Mock(return_value=SimpleNamespace(is_same_job=True, confidence="High", reason="Synthetic"))
-    validate = Mock(return_value=SimpleNamespace(is_same_job=valid))
+    validate = Mock(return_value=SimpleNamespace(is_same_job=valid, description_sufficient=True))
     metadata = Mock(return_value=SimpleNamespace(location="Remote", employment_type="Full-time"))
     score = Mock(return_value=analysis((35, 20, 15, 8, 5)))
     monkeypatch.setattr(nodes, "evaluate_job_source_match", compare)

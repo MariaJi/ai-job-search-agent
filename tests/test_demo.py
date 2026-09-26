@@ -62,10 +62,15 @@ def test_verification_diagnostics_do_not_log_untrusted_details(monkeypatch, caps
     from app import nodes
     monkeypatch.setattr(nodes, "search_original_job", Mock(side_effect=RuntimeError(message)))
     result = nodes.verify_job({"current_job": {
-        "title": "PRIVATE_TITLE_SENTINEL", "company": "Synthetic", "description_complete": False,
+        "title": "Synthetic Engineer", "company": "Synthetic", "description_complete": False,
     }})
     assert result["verified_jobs"][0]["verification_status"] == status
-    assert capsys.readouterr().out == "Verification unavailable; retaining preliminary results.\n"
+    output = capsys.readouterr().out
+    assert "Verification unavailable; retaining preliminary results." in output
+    assert "stage=search class=RuntimeError" in output
+    assert f"status={status} reason=exception" in output
+    assert "PRIVATE_RESUME_SENTINEL" not in output
+    assert "SECRET_SENTINEL" not in output
 
 
 def test_demo_uses_same_openapi_schema_and_explicit_local_cors(monkeypatch):

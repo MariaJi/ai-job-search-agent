@@ -91,7 +91,9 @@ def build_response(state: dict) -> JobSearchResponse:
             verified_match_score=job["match_score"] if is_verified else None,
             confidence=job["confidence"], strengths=job.get("strengths", []),
             missing_skills=job.get("missing_skills", []),
-            recommendation=public_recommendation(job.get("recommendation"), status=status, analysis_type=analysis_type),
+            recommendation=public_recommendation(
+                "Skip" if job.get("eligibility", {}).get("status") == "contradicted" else job.get("recommendation"),
+                status=status, analysis_type=analysis_type),
             source_urls=SourceURLs(
                 original=public_url(job.get("source_url") or job.get("url")),
                 verified=public_url(job.get("verified_url")) if is_verified else None,

@@ -145,7 +145,7 @@ def test_parallel_reducers_collect_each_job_once_with_mixed_verification(monkeyp
     monkeypatch.setattr(nodes, "extract_job_description", lambda url:
                         {"status": "success", "content": "Full description", "source": "mock"})
     monkeypatch.setattr(nodes, "validate_extracted_job", lambda **kwargs:
-                        SimpleNamespace(is_same_job=True))
+                        SimpleNamespace(is_same_job=True, description_sufficient=True))
     monkeypatch.setattr(nodes, "extract_verified_job_metadata", lambda **kwargs:
                         SimpleNamespace(location="Remote", employment_type="Full-time"))
 

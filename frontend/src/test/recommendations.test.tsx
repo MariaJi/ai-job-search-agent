@@ -37,3 +37,29 @@ it('does not promote explicitly preliminary analysis with a verified source', ()
   render(<JobCard job={job} rank={1} demo={false} />)
   expect(screen.getByText('Review original posting')).toBeVisible()
 })
+
+it.each(['verified', 'failed', 'not_attempted'])(
+  'labels source links accurately for %s jobs without promoting recommendations', status => {
+    const job = { ...sample.ranked_jobs[0], verification_status: status,
+      analysis_type: status === 'verified' ? 'verified' : 'preliminary', recommendation: 'Apply',
+      source_urls: { original: 'https://jooble.org/desc/example',
+        verified: 'https://example.com/careers/1', description: null } } as Job
+    render(<JobCard job={job} rank={1} demo={false} />)
+    expect(screen.getByRole('link', { name: /^Review source/ })).toHaveAttribute('href', job.source_urls.original)
+    if (status === 'verified') {
+      expect(screen.getByRole('link', { name: /^View verified source/ })).toHaveAttribute('href', job.source_urls.verified)
+      expect(screen.getByText('Apply')).toBeVisible()
+    } else {
+      expect(screen.queryByRole('link', { name: /^View verified source/ })).not.toBeInTheDocument()
+      expect(screen.getByText('Review original posting')).toBeVisible()
+      expect(screen.queryByText('Apply')).not.toBeInTheDocument()
+    }
+  })
+
+it('does not label a fallback original URL as verified', () => {
+  const job = { ...sample.ranked_jobs[0], verification_status: 'verified', analysis_type: 'verified',
+    source_urls: { original: 'https://jooble.org/desc/example', verified: null, description: null } } as Job
+  render(<JobCard job={job} rank={1} demo={false} />)
+  expect(screen.getByRole('link', { name: /^Review source/ })).toHaveAttribute('href', job.source_urls.original)
+  expect(screen.queryByRole('link', { name: /^View verified source/ })).not.toBeInTheDocument()
+})

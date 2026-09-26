@@ -146,7 +146,7 @@ describe('verification semantics', () => {
     render(<JobCard job={fixture().ranked_jobs[0]} rank={1} demo={false} />)
     expect(screen.getByText('Preliminary Match Score').parentElement).toHaveTextContent('84')
     expect(screen.getByText('Verified Match Score').parentElement).toHaveTextContent('91')
-    expect(screen.getByRole('link', { name: /view source/i })).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByRole('link', { name: /view verified source/i })).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
   it.each([undefined, null, '', 'unknown', 'VERIFIED', 'not_needed', 'failed', '__proto__', 'constructor'])('does not label status %s as verified', status => {

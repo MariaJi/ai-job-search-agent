@@ -140,6 +140,7 @@ def test_tavily_exception_falls_back_to_direct_http(monkeypatch, failure_at):
         "status": "success",
         "content": "Build AI systems",
         "source": "direct_http",
+        "structured_metadata": {},
     }
 
 
