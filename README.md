@@ -14,17 +14,40 @@ local use.
 
 [Live Demo — synthetic, browser-only](https://red-flower-08246411e.6.azurestaticapps.net)
 
+## How it works
+
+The private live workflow separates model judgments from deterministic decisions:
+
+| Stage | Responsibility |
+| --- | --- |
+| Parse request and resume | **LLM:** structured search criteria, explicit constraints, and candidate profile |
+| Retrieve job snippets | **Jooble:** up to 10 candidates; every job starts as preliminary evidence |
+| Filter and bound analysis | **Python:** filter usable Jooble update dates, preserve provider order, cap at `MAX_SEARCH_JOBS` |
+| Score candidate fit | **LLM:** preliminary candidate/job scoring from snippet evidence |
+| Rank and choose verification candidates | **Python:** rank by score, select High/Medium-priority candidates in ranked order, capped by `MAX_VERIFICATION_JOBS` |
+| Discover and assess sources | **Tavily search**, then **LLM** same-job identity assessment |
+| Obtain description evidence | Search `raw_content` → **Tavily extract** → **direct HTTP + Python JSON-LD parsing**, falling back when evidence is unavailable or rejected |
+| Validate and extract metadata | **LLM:** require both same-specific-job identity and sufficient responsibilities/requirements; then extract verified metadata |
+| Re-score verified description | **LLM:** use the existing candidate-fit scoring process and preserve `preliminary_match_score` |
+| Evaluate, rank, and select | **Python:** evaluate explicit constraints, rank using verified scores where available, and select only qualifying verified jobs without definite contradictions |
+
+Failed or unattempted verification retains preliminary evidence in final results;
+it never produces an Apply recommendation. Description extraction alone does not
+verify a job. Ordinary search snippets are not promoted to full descriptions.
+
 ## Features and engineering focus
 
 - **Explainable ranking:** company, role, location, recommendation, confidence,
   strengths, missing skills, and source links in an accessible React workspace.
 - **Evidence-aware verification:** preliminary scores remain distinct from scores
   produced after source verification; failed verification preserves useful results.
+- **Separate eligibility checks:** explicit search constraints can exclude a verified,
+  high-scoring job from Apply without discarding its scores or source evidence.
 - **Reliable orchestration:** LangGraph fan-out/aggregation with explicit empty-result
   paths, defensive job-date parsing, and direct HTTP/JSON-LD extraction fallback.
 - **Bounded DOCX ingestion:** paragraph and table extraction, archive expansion limits,
   and cleanup of temporary uploads without a permanently saved resume.
-- **Safe demonstration:** a key-free sample endpoint, synthetic data, and independent
+- **Safe demonstration:** bundled synthetic data, an optional key-free sample endpoint, and independent
   frontend/backend switches that default live access off.
 - **Testable boundaries:** explicit public Pydantic models, mocked provider calls,
   offline tests, and CI for backend tests plus frontend tests, lint, and build.
@@ -36,25 +59,35 @@ study; confidence labels are model judgments, not calibrated probabilities.
 ## Architecture
 
 The HTTP layer adapts the existing graph; it does not reimplement matching logic.
-The demo reads the same public response shape from an invented fixture and bypasses
-the graph and providers entirely.
+The deployed public static demo reads a bundled synthetic fixture in the browser;
+it makes no backend or provider requests when loading the sample. The private live
+UI calls FastAPI, which runs LangGraph. Both modes use the same public response shape.
+An optional demo-only FastAPI service can serve the fixture over HTTP; it is a
+secondary deployment option, not part of the deployed static-demo path.
 
 ```mermaid
 flowchart TD
-    UI["React + TypeScript workspace"] -->|"GET /api/v1/demo: no keys"| Demo["Isolated public_demo.app:app"]
-    Demo --> Fixture["Synthetic fixture"]
-    Fixture --> DTO["Public Pydantic response"]
-    UI -->|"POST: private local opt-in only"| Gate["Backend live gate + bounded DOCX ingestion"]
-    Gate --> Graph["LangGraph: parse criteria and candidate profile"]
-    Graph --> Search["Jooble job search"]
-    Search --> Rank["Parallel preliminary analysis and ranking"]
-    Rank --> Verify["Bounded source verification: Tavily + HTTP fallback"]
-    Verify --> Final["Verified analysis when available; otherwise retain preliminary results"]
-    Final --> DTO
-    Graph -.-> LLM["OpenAI structured outputs"]
-    Rank -.-> LLM
-    Final -.-> LLM
-    DTO --> Cards["Ranked cards, evidence, and run summary"]
+    PublicUI["Public static React demo"] --> Fixture["Bundled synthetic JSON: no backend or provider calls"]
+    Fixture --> Cards["Ranked cards, evidence, and run summary"]
+    PrivateUI["Private live React UI"] -->|"POST: opt-in + DOCX"| API["FastAPI: live gate and bounded resume ingestion"]
+    API --> Parse["LangGraph / LLM: criteria and candidate profile"]
+    Parse --> Search["Jooble: job snippets"]
+    Search --> Bound["Python: date filter and analysis cap"]
+    Bound --> Score["LLM: preliminary fit scoring"]
+    Score --> Rank["Python: ranking and bounded verification selection"]
+    Rank --> Discover["Tavily search + LLM source identity check"]
+    Discover --> Evidence["Search raw content, then Tavily extract, then HTTP / JSON-LD"]
+    Evidence --> Validate["LLM: same job + sufficient description, then metadata"]
+    Validate --> Rescore["LLM: verified re-scoring; preserve preliminary score"]
+    Rank --> Retain["Retain unattempted or unverified preliminary evidence"]
+    Discover -->|"No accepted source"| Retain
+    Validate -->|"No successful verification"| Retain
+    Rescore --> Final["Python: eligibility, final ranking, selection"]
+    Retain --> Final
+    Final --> DTO["Public API response"]
+    DTO --> Cards
+    OptionalUI["Optional API-backed sample UI"] -.-> DemoAPI["Demo-only FastAPI: synthetic fixture, no providers"]
+    DemoAPI --> DTO
 ```
 
 Empty job lists, no verification candidates, and no successfully verified jobs still
@@ -68,14 +101,29 @@ streaming, persistent job store, or automatic retry in the UI.
 | HTTP contract and validation | FastAPI, Pydantic; `app/api.py`, `app/api_models.py`, `app/api_service.py` |
 | Isolated public service | FastAPI; `public_demo/app.py` (no live imports or upload routes) |
 | Orchestration and matching | LangGraph, LangChain/OpenAI structured outputs; `app/graph.py`, `app/nodes.py` |
+| Deterministic eligibility | Explicit-constraint comparison and country normalization; `app/eligibility.py` |
 | Ingestion and retrieval | python-docx, requests, Beautiful Soup, Jooble, Tavily; `app/uploads.py`, `app/tools/` |
 | Offline quality checks | pytest, Vitest, Testing Library, ESLint, TypeScript; `tests/`, `frontend/src/test/` |
 | Continuous integration | GitHub Actions; `.github/workflows/ci.yml` |
 
 ### Reading match scores
 
+| Concept | Meaning |
+| --- | --- |
+| **Verified** | Sufficient evidence that the source is the same posting and contains enough job-description evidence for re-scoring; not a guarantee of suitability |
+| **Match score** | Candidate/job fit, independent of eligibility; the preliminary score is retained after verified re-scoring |
+| **Eligibility** | Deterministic comparison of extracted verified evidence against explicit search constraints: `compatible`, `contradicted`, or `unknown` |
+| **Apply** | Verified analysis with a qualifying score (at least 75) and recommendation, and no definite eligibility contradiction |
+
+A high-scoring job can be **Verified** and still receive **Skip**. A definite
+constraint contradiction forces Skip and excludes the job from selected results,
+while preserving its verification status, scores, and source evidence in ranked
+results. Unknown eligibility does not itself block Apply and is not confirmed
+eligibility. Eligibility evidence is extracted by an LLM; the comparison is Python.
+
 Recommendations are evidence-gated: only explicitly verified results with verified
-analysis and an internal `Apply`/`Strong Apply` recommendation display **Apply**.
+analysis, a qualifying score/recommendation, and no definite eligibility contradiction
+display **Apply**.
 All preliminary, missing/unknown, failed, not-found, not-attempted, and `not_needed`
 statuses display **Review original posting**, regardless of model wording. Verified
 `Maybe`/`Skip` recommendations remain unchanged; unsupported wording also falls back
@@ -102,6 +150,23 @@ remains an empty string and is displayed as "Not specified"; it does not default
 to Full-time. This preference does not filter results or affect match scores.
 Verified postings may separately contain a job-level employment type extracted
 from the posting. Confirm the type on the original posting before applying.
+
+### Search constraints and evidence limits
+
+- Remote and geography are separate: remote alone requires remote work but implies
+  neither US nor worldwide applicant eligibility. Remote + US keeps `Remote` as the
+  retrieval location and preserves US separately for eligibility checks.
+- Omitted recency uses the seven-day retrieval default but creates no explicit
+  verified-posting-age constraint. Jooble `updated` is only a retrieval signal,
+  never the verified original posting date; missing/malformed update dates are retained.
+- Applicant-country eligibility is not inferred from company headquarters. Supported
+  country codes and aliases such as UK/GB are normalized; ambiguous, malformed, or
+  unsupported evidence remains unknown, including partially unsupported country lists.
+- Country conflicts require a clearly exhaustive permitted-country set. City/state
+  eligibility is intentionally limited: country compatibility does not prove a city match.
+- Direct HTTP extraction recursively reads JobPosting JSON-LD objects, arrays, and
+  `@graph`, keeping structured metadata tied to the same selected description. It
+  does not perform arbitrary HTML scraping or JavaScript rendering.
 
 ## Safe local demo — no resume or provider keys needed
 
@@ -236,7 +301,7 @@ Only one file and one search field are accepted. Use the DOCX MIME type or
 verification-limit overrides; retrieval requests 10 candidates and selects at most
 `MAX_SEARCH_JOBS` date-eligible jobs for analysis (default 10).
 
-### Controlled private test limits (Stage 4C)
+### Controlled private test limits
 
 The root `.env.example` documents this opt-in test configuration without credentials:
 
@@ -273,16 +338,21 @@ before processing any result; verification also caps comparison inputs and extra
 attempts defensively. Tavily values use the same fail-closed integer validation,
 with default 5 and range 1–20. Verification settings retain their defaults/ranges.
 
-With the controlled settings, the strict maximum is **12 logical provider calls**
+With the controlled settings, the strict maximum is **14 logical provider calls**
 per normal workflow run with unchanged process settings:
-9 OpenAI calls (criteria, profile, 3 preliminary analyses, 1 source comparison,
-1 description validation, 1 metadata extraction, 1 verified analysis), 1 Jooble
+11 OpenAI calls (criteria, profile, 3 preliminary analyses, 1 source comparison,
+up to 3 description validations, 1 metadata extraction, 1 verified analysis), 1 Jooble
 request, and 2 Tavily calls (search and extraction). OpenAI retries are disabled.
+The three possible validations correspond to search raw content, Tavily-extracted
+text, and direct HTTP/JSON-LD text. Accepted evidence stops the fallback chain early;
+missing text skips validation, so actual call counts can be lower.
 At most one additional direct job-page HTTP fallback call can occur, excluding
 redirects. Both Jooble job and Tavily source limits are enforced locally even if
 providers return oversized lists. Logical call counts do not bound redirect hops,
 token usage, or dollar cost; repeat submissions start separate runs.
-Prompts, model (`gpt-4o-mini`), temperature, and scoring are unchanged. Public demo
+Candidate-fit scoring and its weights remain unchanged; parsing and verification-related
+prompts evolved to preserve explicit constraints and assess description sufficiency.
+The model remains `gpt-4o-mini` with temperature zero. Public demo
 services do not import these private limit settings or gain any live capability.
 
 Both search responses contain `criteria`, `candidate_profile` (summary and experience,
@@ -318,8 +388,12 @@ npm audit
 Backend tests block external socket connections, mock workflow/provider boundaries,
 generate DOCX content in memory, and include credential-free import checks. Frontend
 tests replace fetch with mocks. They cover empty/failure paths, date parsing,
-extraction fallback, score semantics, bounded uploads, demo behavior, errors, and
-accessibility-focused interactions. Manual scripts are outside pytest collection.
+extraction fallback, description sufficiency, recursive JSON-LD, country normalization,
+remote/geography separation, eligibility contradiction protection, and preservation
+of scores/evidence. They also check that unverified jobs cannot become Apply, plus
+bounded uploads, demo behavior, errors, and accessibility-focused interactions.
+Mocked LLM tests verify contracts and routing, not live extraction accuracy.
+Manual scripts are outside pytest collection.
 
 The CI workflow runs on pushes, pull requests, and manual dispatch. It installs
 backend dependencies and locked frontend dependencies, then runs the complete suites,
@@ -382,7 +456,7 @@ as `VITE_API_BASE_URL`, `VITE_ENABLE_LIVE_SEARCH=false` at build time, and allow
 the exact deployed frontend origin in backend CORS. This proposal uses separate
 origins; it does not assume a linked backend or a wildcard.
 
-### Isolated demo service and local verification (Stage 4B)
+### Optional isolated demo service and local verification
 
 `public_demo.app:app` imports only FastAPI, the standard library, and the existing
 public Pydantic models. It reads one fixed, packaged synthetic fixture. It does not
