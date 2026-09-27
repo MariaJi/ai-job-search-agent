@@ -460,6 +460,35 @@ h2 {
   display:grid;
   gap:20px
 }
+.results-guide {
+  border-top:1px solid var(--line);
+  padding:14px 0;
+  margin-bottom:6px;
+  font-size:12px;
+  color:var(--muted)
+}
+.results-guide h3 {
+  font-size:14px;
+  color:var(--ink)
+}
+.results-guide dl {
+  margin:10px 0
+}
+.results-guide dl>div+div {
+  margin-top:6px
+}
+.results-guide dt,.results-guide dd {
+  display:inline;
+  margin:0
+}
+.results-guide dt {
+  font-weight:650;
+  color:var(--ink);
+  margin-right:6px
+}
+.results-guide dd {
+  overflow-wrap:anywhere
+}
 .job-card {
   background:var(--surface);
   border:1px solid var(--line);

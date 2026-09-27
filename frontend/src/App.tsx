@@ -78,9 +78,8 @@ export default function App({ liveEnabled: requestedLive = LIVE_ENABLED }: { liv
           </div>
           <button className="button primary" type="button" disabled={!!busy} onClick={() => void run('demo')}>{busy === 'demo' ? 'Loading Sample Demo…' : 'Try Sample Demo'} <span aria-hidden="true">↗</span></button>
           <button className={`button secondary${STATIC_DEMO ? ' private-mode-button' : ''}`} type="submit" disabled={!liveEnabled || !!busy}>Run Live Analysis {STATIC_DEMO ? <small>Private mode only</small> : <span aria-hidden="true">→</span>}</button>
-          {STATIC_DEMO && <p className="privacy-note">Resume upload and live provider-backed analysis are available in private mode. This public demo uses a synthetic candidate profile and bundled sample results.</p>}
-          {STATIC_DEMO && <p className="privacy-note"><strong>Interactive replay of a completed synthetic agent run.</strong> No resume was uploaded. This demo runs entirely in your browser without a backend or provider calls.</p>}
-          <div className="privacy-note"><strong>{liveEnabled ? 'Private, local use only' : 'Sample first. No provider costs.'}</strong><p>{liveEnabled ? 'Live analysis sends resume-derived information to external providers and may incur costs. This tool never submits applications.' : 'Live analysis is disabled in the public demo to protect private data and provider costs. No resume or API keys are needed for the sample.'}</p></div>
+          {STATIC_DEMO ? <p className="privacy-note">Resume upload and live analysis are private-only. This browser-only demo uses a synthetic candidate and bundled results, with no backend or provider calls. No resume is uploaded.</p>
+            : <div className="privacy-note"><strong>{liveEnabled ? 'Private, local use only' : 'Sample first. No provider costs.'}</strong><p>{liveEnabled ? 'Live analysis sends resume-derived information to external providers and may incur costs. This tool never submits applications.' : 'Live analysis is disabled in the public demo to protect private data and provider costs. No resume or API keys are needed for the sample.'}</p></div>}
         </form>
         <p className="stack-note">Real implementation: LangGraph <span> / </span> FastAPI <span> / </span> OpenAI <span> / </span> Jooble <span> / </span> Tavily <span> / </span> React. {STATIC_DEMO && 'No providers run in this public replay.'}</p>
         <p className="stack-note"><a href="https://github.com/MariaJi/ai-job-search-agent" target="_blank" rel="noopener noreferrer">View source code on GitHub <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span></a></p>
@@ -95,6 +94,16 @@ export default function App({ liveEnabled: requestedLive = LIVE_ENABLED }: { liv
           <dl className="metrics"><div><dt>Jobs found</dt><dd>{result.run_summary.jobs_found}</dd></div><div><dt>Analyzed</dt><dd>{result.run_summary.jobs_analyzed}</dd></div><div><dt>Verified</dt><dd>{result.run_summary.verified_jobs}</dd></div><div><dt>Preliminary</dt><dd>{result.run_summary.preliminary_jobs}</dd></div></dl>
           <details className="run-details"><summary>Search criteria & candidate summary</summary><p>{result.criteria.role} · {result.criteria.location} · Last {result.criteria.days_old} days</p><p>Employment type: {result.criteria.employment_type || 'Not specified'} (preference only)</p><p>Employment type is not currently used to filter or score jobs. Confirm the type on the original posting.</p><p>{result.candidate_profile.summary}</p><p>{result.run_summary.verification_attempted} verification attempts · {result.run_summary.selected_jobs} selected · {result.run_summary.returned_jobs} returned · Run {result.run_summary.status}</p></details>
           {result.run_summary.warnings.length > 0 && <div className="run-warnings" role="status">{result.run_summary.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</div>}
+          {STATIC_DEMO && <section className="results-guide" aria-labelledby="results-guide-title">
+            <h3 id="results-guide-title">How to read these results</h3>
+            <dl>
+              <div><dt>Match</dt><dd>Candidate/job fit: preliminary evidence is scored first, then a sufficiently verified description is scored again (84 → 91 in this sample).</dd></div>
+              <div><dt>Verified</dt><dd>Evidence supports the same posting and sufficient description content for analysis—not eligibility or an automatic recommendation.</dd></div>
+              <div><dt>Eligibility</dt><dd>Explicit search constraints are checked separately. Unknown means insufficient evidence, not confirmed eligibility.</dd></div>
+              <div><dt>Recommendation</dt><dd>A definite eligibility contradiction forces Skip, even for a Verified, high-scoring job.</dd></div>
+            </dl>
+            <p>Private workflow illustrated here (no provider calls): LLM parsing → Jooble retrieval → preliminary scoring → bounded source verification → verified re-scoring → deterministic Python eligibility/ranking.</p>
+          </section>}
           {result.ranked_jobs.length === 0 ? <div className="empty-state"><h3>No matching jobs this time.</h3><p>Try a broader role, location, or date window. An empty shortlist is a valid completed result.</p></div> : <div className="job-list">{result.ranked_jobs.map((job, i) => <JobCard key={i} job={job} rank={i + 1} demo={mode === 'demo'} />)}</div>}
         </>}
         <footer className="results-footer">Decision support, not a hiring prediction. This tool never submits applications. Review the original posting before applying.</footer>
